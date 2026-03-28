@@ -67,6 +67,12 @@ const Navbar = () => {
 
         {/* CTA / Auth */}
         <div className="hidden md:flex items-center gap-3">
+          <Link
+            href="/dashboard"
+            className="inline-flex items-center justify-center rounded-full border border-border px-5 py-2 text-sm font-medium text-foreground transition-colors hover:bg-muted"
+          >
+            Dashboard
+          </Link>
           <a
             href="#demo"
             className="btn-primary !py-2 !px-5 text-sm animate-glow-pulse"
@@ -172,6 +178,13 @@ const Navbar = () => {
           <a href="#demo" className="btn-primary !py-2 !px-5 text-sm text-center">
             See It in Action
           </a>
+          <Link
+            href="/dashboard"
+            className="rounded-full border border-border px-4 py-2 text-center text-sm font-medium text-foreground transition-colors hover:bg-muted"
+            onClick={() => setMobileOpen(false)}
+          >
+            Dashboard
+          </Link>
           {!isLoading && (
             user ? (
               <div className="rounded-2xl border border-border">

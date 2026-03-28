@@ -1,6 +1,7 @@
 import express from 'express';
 import authRoutes from './authRoutes.js';
 import userRoutes from "./userRoutes.js";
+import cognitiveRoutes from "./cognitiveRoutes.js";
 
 const router = express.Router();
 
@@ -12,6 +13,7 @@ router.get('/health', (req, res) => {
 // Authentication routes
 router.use('/auth', authRoutes);
 router.use('/users', userRoutes);
+router.use('/cognitive', cognitiveRoutes);
 // Add your resource routes here
 
 export default router;
