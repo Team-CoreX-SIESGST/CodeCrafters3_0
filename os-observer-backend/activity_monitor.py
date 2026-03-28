@@ -126,7 +126,8 @@ class MongoStore:
             if self.client is None:
                 raise RuntimeError("Missing MONGO_URI — running in memory-only mode.")
             self.client.admin.command("ping")
-            db = self.client.get_default_database() or self.client[DB_NAME]
+            default_db = self.client.get_default_database()
+            db = default_db if default_db is not None else self.client[DB_NAME]
             for bucket in self.BUCKETS:
                 setattr(self, bucket, db[f"cognitive_{bucket}"])
             self.snapshots.create_index([("user_id", DESCENDING), ("generated_at", DESCENDING)])
@@ -459,7 +460,8 @@ class ActivityMonitor:
         payload = self.classifier.export_baseline()
         now = utcnow()
         self.store.save_baseline(self.user_id, payload, now)
-        self._write_baseline_to_disk(payload)
+        if not self.store.enabled:
+            self._write_baseline_to_disk(payload)
         self._last_baseline_persist_at = now_ts
 
     def _load_baseline_from_disk(self) -> dict[str, Any] | None:
