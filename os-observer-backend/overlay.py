@@ -30,6 +30,11 @@ class StatusOverlay:
         self.refresh_ms = refresh_ms
         self._drag_offset_x = 0
         self._drag_offset_y = 0
+        self._resize_start_width = 0
+        self._resize_start_height = 0
+        self._resize_start_x = 0
+        self._resize_start_y = 0
+        self._content_min_width = 560
 
         self.root = tk.Tk()
         self.root.title("Observi Cursor Activity")
@@ -47,6 +52,7 @@ class StatusOverlay:
         self.root.minsize(420, 260)
         self.root.bind("<Map>", self._restore_window_chrome)
         self.root.bind_all("<MouseWheel>", self._on_mousewheel, add="+")
+        self.root.bind_all("<Shift-MouseWheel>", self._on_shift_mousewheel, add="+")
 
         self.container = tk.Frame(self.root, bg="#0b1220", padx=16, pady=14)
         self.container.pack(fill="both", expand=True)
@@ -103,8 +109,12 @@ class StatusOverlay:
         self.body.pack(fill="both", expand=True)
         self._bind_drag(self.body)
 
+        self.viewport = tk.Frame(self.body, bg="#0b1220")
+        self.viewport.pack(fill="both", expand=True)
+        self._bind_drag(self.viewport)
+
         self.canvas = tk.Canvas(
-            self.body,
+            self.viewport,
             bg="#0b1220",
             highlightthickness=0,
             bd=0,
@@ -112,9 +122,16 @@ class StatusOverlay:
         self.canvas.pack(side="left", fill="both", expand=True)
         self._bind_drag(self.canvas)
 
-        self.scrollbar = tk.Scrollbar(self.body, orient="vertical", command=self.canvas.yview)
-        self.scrollbar.pack(side="right", fill="y")
-        self.canvas.configure(yscrollcommand=self.scrollbar.set)
+        self.v_scrollbar = tk.Scrollbar(self.viewport, orient="vertical", command=self.canvas.yview)
+        self.v_scrollbar.pack(side="right", fill="y")
+
+        self.h_scrollbar = tk.Scrollbar(self.body, orient="horizontal", command=self.canvas.xview)
+        self.h_scrollbar.pack(side="bottom", fill="x", pady=(8, 0))
+
+        self.canvas.configure(
+            yscrollcommand=self.v_scrollbar.set,
+            xscrollcommand=self.h_scrollbar.set,
+        )
 
         self.content = tk.Frame(self.canvas, bg="#0b1220")
         self._bind_drag(self.content)
@@ -125,6 +142,19 @@ class StatusOverlay:
         )
         self.content.bind("<Configure>", self._sync_scroll_region)
         self.canvas.bind("<Configure>", self._resize_canvas_content)
+
+        self.resize_grip = tk.Label(
+            self.body,
+            text="//",
+            font=("Segoe UI", 10, "bold"),
+            bg="#162033",
+            fg="#cbd5e1",
+            width=2,
+            cursor="size_nw_se",
+        )
+        self.resize_grip.pack(side="right", anchor="se", padx=(8, 0), pady=(8, 0))
+        self.resize_grip.bind("<ButtonPress-1>", self._start_resize, add="+")
+        self.resize_grip.bind("<B1-Motion>", self._resize_window, add="+")
 
         self.badge = tk.Label(
             self.content,
@@ -230,7 +260,10 @@ class StatusOverlay:
 
         self.hint = tk.Label(
             self.content,
-            text="Drag anywhere to move. Use the _ button to minimize. Press Ctrl+C in the terminal to stop.",
+            text=(
+                "Drag anywhere to move. Use the _ button to minimize. "
+                "Use the bottom-right grip to resize. Shift + mouse wheel scrolls sideways."
+            ),
             font=("Segoe UI", 9),
             bg="#0b1220",
             fg="#64748b",
@@ -265,12 +298,14 @@ class StatusOverlay:
         self.canvas.configure(scrollregion=self.canvas.bbox("all"))
 
     def _resize_canvas_content(self, event) -> None:
-        self.canvas.itemconfigure(self.canvas_window, width=event.width)
-        wraplength = max(event.width - 24, 240)
+        content_width = max(event.width, self._content_min_width)
+        self.canvas.itemconfigure(self.canvas_window, width=content_width)
+        wraplength = max(content_width - 24, 240)
         self.message.configure(wraplength=wraplength)
         self.open_apps.configure(wraplength=wraplength)
         self.events.configure(wraplength=wraplength)
         self.hint.configure(wraplength=wraplength)
+        self._sync_scroll_region()
 
     def _on_mousewheel(self, event) -> None:
         widget_under_pointer = self.root.winfo_containing(event.x_root, event.y_root)
@@ -279,6 +314,14 @@ class StatusOverlay:
 
         if widget_under_pointer == self.root or self._is_descendant(widget_under_pointer, self.canvas):
             self.canvas.yview_scroll(int(-event.delta / 120), "units")
+
+    def _on_shift_mousewheel(self, event) -> None:
+        widget_under_pointer = self.root.winfo_containing(event.x_root, event.y_root)
+        if widget_under_pointer is None:
+            return
+
+        if widget_under_pointer == self.root or self._is_descendant(widget_under_pointer, self.canvas):
+            self.canvas.xview_scroll(int(-event.delta / 120), "units")
 
     def _bind_drag(self, widget) -> None:
         widget.bind("<ButtonPress-1>", self._start_drag, add="+")
@@ -292,6 +335,19 @@ class StatusOverlay:
         x = event.x_root - self._drag_offset_x
         y = event.y_root - self._drag_offset_y
         self.root.geometry(f"+{x}+{y}")
+
+    def _start_resize(self, event) -> None:
+        self._resize_start_width = self.root.winfo_width()
+        self._resize_start_height = self.root.winfo_height()
+        self._resize_start_x = event.x_root
+        self._resize_start_y = event.y_root
+
+    def _resize_window(self, event) -> None:
+        width_delta = event.x_root - self._resize_start_x
+        height_delta = event.y_root - self._resize_start_y
+        new_width = max(self.root.winfo_reqwidth(), self._resize_start_width + width_delta, 420)
+        new_height = max(self.root.winfo_reqheight(), self._resize_start_height + height_delta, 260)
+        self.root.geometry(f"{new_width}x{new_height}")
 
     @staticmethod
     def _is_descendant(widget, parent) -> bool:
@@ -322,10 +378,12 @@ class StatusOverlay:
         self.header.configure(bg=style["bg"])
         self.header_title.configure(bg=style["bg"], fg=style["text"])
         self.body.configure(bg=style["bg"])
+        self.viewport.configure(bg=style["bg"])
         self.canvas.configure(bg=style["bg"])
         self.content.configure(bg=style["bg"])
         self.minimize_button.configure(bg="#162033", fg="#e2e8f0")
         self.close_button.configure(bg="#162033", fg="#e2e8f0")
+        self.resize_grip.configure(bg="#162033", fg="#cbd5e1")
         self.badge.configure(
             text=f"{style['badge']}  {confidence}%",
             bg=style["accent"],
