@@ -28,6 +28,8 @@ class StatusOverlay:
     def __init__(self, payload_provider, refresh_ms: int = 500) -> None:
         self.payload_provider = payload_provider
         self.refresh_ms = refresh_ms
+        self._drag_offset_x = 0
+        self._drag_offset_y = 0
 
         self.root = tk.Tk()
         self.root.title("Observi Cursor Activity")
@@ -42,12 +44,90 @@ class StatusOverlay:
         x = max(screen_width - width - 20, 0)
         y = 20
         self.root.geometry(f"{width}x{height}+{x}+{y}")
+        self.root.minsize(420, 260)
+        self.root.bind("<Map>", self._restore_window_chrome)
+        self.root.bind_all("<MouseWheel>", self._on_mousewheel, add="+")
 
-        container = tk.Frame(self.root, bg="#0b1220", padx=16, pady=14)
-        container.pack(fill="both", expand=True)
+        self.container = tk.Frame(self.root, bg="#0b1220", padx=16, pady=14)
+        self.container.pack(fill="both", expand=True)
+        self._bind_drag(self.container)
+
+        self.header = tk.Frame(self.container, bg="#0b1220")
+        self.header.pack(fill="x", pady=(0, 10))
+        self._bind_drag(self.header)
+
+        self.header_title = tk.Label(
+            self.header,
+            text="Observi Cursor Activity",
+            font=("Segoe UI", 11, "bold"),
+            bg="#0b1220",
+            fg="#f8fafc",
+            anchor="w",
+        )
+        self.header_title.pack(side="left", fill="x", expand=True)
+        self._bind_drag(self.header_title)
+
+        self.minimize_button = tk.Button(
+            self.header,
+            text="_",
+            command=self._minimize_window,
+            font=("Segoe UI", 11, "bold"),
+            bg="#162033",
+            fg="#e2e8f0",
+            activebackground="#23314c",
+            activeforeground="#f8fafc",
+            bd=0,
+            padx=12,
+            pady=2,
+            cursor="hand2",
+        )
+        self.minimize_button.pack(side="right", padx=(8, 0))
+
+        self.close_button = tk.Button(
+            self.header,
+            text="X",
+            command=self.close,
+            font=("Segoe UI", 10, "bold"),
+            bg="#162033",
+            fg="#e2e8f0",
+            activebackground="#7f1d1d",
+            activeforeground="#f8fafc",
+            bd=0,
+            padx=12,
+            pady=3,
+            cursor="hand2",
+        )
+        self.close_button.pack(side="right")
+
+        self.body = tk.Frame(self.container, bg="#0b1220")
+        self.body.pack(fill="both", expand=True)
+        self._bind_drag(self.body)
+
+        self.canvas = tk.Canvas(
+            self.body,
+            bg="#0b1220",
+            highlightthickness=0,
+            bd=0,
+        )
+        self.canvas.pack(side="left", fill="both", expand=True)
+        self._bind_drag(self.canvas)
+
+        self.scrollbar = tk.Scrollbar(self.body, orient="vertical", command=self.canvas.yview)
+        self.scrollbar.pack(side="right", fill="y")
+        self.canvas.configure(yscrollcommand=self.scrollbar.set)
+
+        self.content = tk.Frame(self.canvas, bg="#0b1220")
+        self._bind_drag(self.content)
+        self.canvas_window = self.canvas.create_window(
+            (0, 0),
+            window=self.content,
+            anchor="nw",
+        )
+        self.content.bind("<Configure>", self._sync_scroll_region)
+        self.canvas.bind("<Configure>", self._resize_canvas_content)
 
         self.badge = tk.Label(
-            container,
+            self.content,
             text="OBSERVING",
             font=("Segoe UI", 10, "bold"),
             anchor="w",
@@ -56,9 +136,10 @@ class StatusOverlay:
             bd=0,
         )
         self.badge.pack(anchor="w")
+        self._bind_drag(self.badge)
 
         self.title = tk.Label(
-            container,
+            self.content,
             text="Waiting for cursor movement...",
             font=("Segoe UI", 16, "bold"),
             bg="#0b1220",
@@ -66,9 +147,10 @@ class StatusOverlay:
             anchor="w",
         )
         self.title.pack(anchor="w", pady=(12, 2), fill="x")
+        self._bind_drag(self.title)
 
         self.message = tk.Label(
-            container,
+            self.content,
             text="Move the cursor to let the OS-level detector classify activity.",
             font=("Segoe UI", 10),
             bg="#0b1220",
@@ -78,9 +160,10 @@ class StatusOverlay:
             wraplength=520,
         )
         self.message.pack(anchor="w", fill="x")
+        self._bind_drag(self.message)
 
         self.summary = tk.Label(
-            container,
+            self.content,
             text=(
                 "Active app: Unknown\n"
                 "Window: Unknown\n"
@@ -95,9 +178,10 @@ class StatusOverlay:
             justify="left",
         )
         self.summary.pack(anchor="w", pady=(10, 0), fill="x")
+        self._bind_drag(self.summary)
 
         self.open_apps_title = tk.Label(
-            container,
+            self.content,
             text="Open Applications",
             font=("Segoe UI", 10, "bold"),
             bg="#0b1220",
@@ -105,9 +189,10 @@ class StatusOverlay:
             anchor="w",
         )
         self.open_apps_title.pack(anchor="w", pady=(12, 2), fill="x")
+        self._bind_drag(self.open_apps_title)
 
         self.open_apps = tk.Label(
-            container,
+            self.content,
             text="- Waiting for window scan...",
             font=("Consolas", 9),
             bg="#0b1220",
@@ -117,9 +202,10 @@ class StatusOverlay:
             wraplength=520,
         )
         self.open_apps.pack(anchor="w", fill="x")
+        self._bind_drag(self.open_apps)
 
         self.events_title = tk.Label(
-            container,
+            self.content,
             text="Recent Events",
             font=("Segoe UI", 10, "bold"),
             bg="#0b1220",
@@ -127,9 +213,10 @@ class StatusOverlay:
             anchor="w",
         )
         self.events_title.pack(anchor="w", pady=(12, 2), fill="x")
+        self._bind_drag(self.events_title)
 
         self.events = tk.Label(
-            container,
+            self.content,
             text="- Waiting for activity...",
             font=("Consolas", 9),
             bg="#0b1220",
@@ -139,16 +226,20 @@ class StatusOverlay:
             wraplength=520,
         )
         self.events.pack(anchor="w", fill="x")
+        self._bind_drag(self.events)
 
         self.hint = tk.Label(
-            container,
-            text="Press Ctrl+C in the terminal to stop.",
+            self.content,
+            text="Drag anywhere to move. Use the _ button to minimize. Press Ctrl+C in the terminal to stop.",
             font=("Segoe UI", 9),
             bg="#0b1220",
             fg="#64748b",
             anchor="w",
+            justify="left",
+            wraplength=520,
         )
         self.hint.pack(anchor="w", pady=(4, 0), fill="x")
+        self._bind_drag(self.hint)
 
     def run(self) -> None:
         self._refresh()
@@ -156,6 +247,63 @@ class StatusOverlay:
 
     def close(self) -> None:
         self.root.destroy()
+
+    def _minimize_window(self) -> None:
+        self.root.update_idletasks()
+        self.root.overrideredirect(False)
+        self.root.iconify()
+
+    def _restore_window_chrome(self, _event=None) -> None:
+        if self.root.state() == "normal":
+            self.root.after(10, self._reapply_overlay_mode)
+
+    def _reapply_overlay_mode(self) -> None:
+        self.root.overrideredirect(True)
+        self.root.attributes("-topmost", True)
+
+    def _sync_scroll_region(self, _event=None) -> None:
+        self.canvas.configure(scrollregion=self.canvas.bbox("all"))
+
+    def _resize_canvas_content(self, event) -> None:
+        self.canvas.itemconfigure(self.canvas_window, width=event.width)
+        wraplength = max(event.width - 24, 240)
+        self.message.configure(wraplength=wraplength)
+        self.open_apps.configure(wraplength=wraplength)
+        self.events.configure(wraplength=wraplength)
+        self.hint.configure(wraplength=wraplength)
+
+    def _on_mousewheel(self, event) -> None:
+        widget_under_pointer = self.root.winfo_containing(event.x_root, event.y_root)
+        if widget_under_pointer is None:
+            return
+
+        if widget_under_pointer == self.root or self._is_descendant(widget_under_pointer, self.canvas):
+            self.canvas.yview_scroll(int(-event.delta / 120), "units")
+
+    def _bind_drag(self, widget) -> None:
+        widget.bind("<ButtonPress-1>", self._start_drag, add="+")
+        widget.bind("<B1-Motion>", self._drag_window, add="+")
+
+    def _start_drag(self, event) -> None:
+        self._drag_offset_x = event.x_root - self.root.winfo_x()
+        self._drag_offset_y = event.y_root - self.root.winfo_y()
+
+    def _drag_window(self, event) -> None:
+        x = event.x_root - self._drag_offset_x
+        y = event.y_root - self._drag_offset_y
+        self.root.geometry(f"+{x}+{y}")
+
+    @staticmethod
+    def _is_descendant(widget, parent) -> bool:
+        current = widget
+        while current is not None:
+            if current == parent:
+                return True
+            current_name = current.winfo_parent()
+            if not current_name:
+                return False
+            current = current.nametowidget(current_name)
+        return False
 
     def _refresh(self) -> None:
         snapshot = self.payload_provider()
@@ -170,6 +318,14 @@ class StatusOverlay:
         confidence = int(float(cursor["confidence"]) * 100)
 
         self.root.configure(bg=style["bg"])
+        self.container.configure(bg=style["bg"])
+        self.header.configure(bg=style["bg"])
+        self.header_title.configure(bg=style["bg"], fg=style["text"])
+        self.body.configure(bg=style["bg"])
+        self.canvas.configure(bg=style["bg"])
+        self.content.configure(bg=style["bg"])
+        self.minimize_button.configure(bg="#162033", fg="#e2e8f0")
+        self.close_button.configure(bg="#162033", fg="#e2e8f0")
         self.badge.configure(
             text=f"{style['badge']}  {confidence}%",
             bg=style["accent"],
