@@ -36,6 +36,7 @@ from app_monitor      import AppMonitor
 from camera_monitor   import CameraMonitor
 from classifier       import CognitiveStateClassifier, FeatureVector
 from cursor_monitor   import CursorMonitor
+from focus_mode_controller import FocusModeController
 from keyboard_monitor import KeyboardMonitor
 from time_tracker     import TimeTracker
 try:
@@ -379,6 +380,7 @@ class ActivityMonitor:
 
         # State tracking
         self._last_state:        str | None = None
+        self._last_state_label:  str | None = None
         self._last_cursor_state: str | None = None
 
         # Confusion episode tracking
@@ -409,6 +411,7 @@ class ActivityMonitor:
         self.camera_monitor   = CameraMonitor(window_seconds=settings.camera_window_seconds, event_callback=self.record_event)
         self.app_monitor      = AppMonitor(poll_interval=2.0,              event_callback=self.record_event)
         self.time_tracker     = TimeTracker()
+        self.focus_mode       = FocusModeController(event_callback=self.record_event)
         self.classifier       = CognitiveStateClassifier(calibration_seconds=90.0, minimum_samples=20)
         self._restore_classifier_baseline()
 
@@ -425,6 +428,7 @@ class ActivityMonitor:
 
     def stop(self) -> None:
         self._persist_classifier_baseline(force=True)
+        self.focus_mode.restore()
         self.cursor_monitor.stop()
         self.keyboard_monitor.stop()
         if settings.camera_enabled:
@@ -1236,6 +1240,9 @@ class ActivityMonitor:
                 camera           = camera,
                 idle_seconds     = idle_seconds,
             )
+            if state_label != self._last_state_label:
+                self.focus_mode.sync(state_label)
+                self._last_state_label = state_label
 
             # ── Store artifact friction ───────────────────────────────────
             self.store.insert("artifacts", {
