@@ -1,80 +1,135 @@
-#camera_monitor.py
+"""
+camera_monitor.py  (enhanced)
+──────────────────────────────
+Extends the original PERCLOS monitor with:
 
+  BLINK DETECTION
+    • Counts blinks over a rolling 60-second window.
+    • Normal rate: 12-20 blinks/min.
+    • LOW  (<8/min)  -> intense focus, possible eye strain signal.
+    • HIGH (>30/min) -> fatigue signal.
+    • Uses an EAR-threshold state machine (OPEN -> CLOSING -> BLINK).
+
+  FACIAL EXPRESSION HINTS
+    • "neutral"   - baseline
+    • "concerned" - inner eyebrows furrowed (confusion proxy)
+    • "surprised" - eyebrows raised (discovery / alertness)
+    • "squinting" - eyes partially closed without full closure (strain)
+
+MediaPipe landmark indices used:
+  LEFT_EYE  = (33, 160, 158, 133, 153, 144)
+  RIGHT_EYE = (362, 385, 387, 263, 373, 380)
+  MOUTH     = (61, 291, 0, 17)
+  INNER_BROW_L = 105   INNER_BROW_R = 334
+  EYE_TOP_L    = 159   EYE_TOP_R    = 386
+"""
 from __future__ import annotations
 
 import math
 import threading
 import time
 from collections import deque
-from typing import Deque
+from typing import Deque, Optional
 
 
-LEFT_EYE = (33, 160, 158, 133, 153, 144)
-RIGHT_EYE = (362, 385, 387, 263, 373, 380)
+LEFT_EYE      = (33, 160, 158, 133, 153, 144)
+RIGHT_EYE     = (362, 385, 387, 263, 373, 380)
+MOUTH_CORNERS = (61, 291)
+MOUTH_LIP_TOP = 0
+MOUTH_LIP_BOT = 17
+INNER_BROW_L  = 105
+INNER_BROW_R  = 334
+EYE_TOP_L     = 159
+EYE_TOP_R     = 386
+
+EAR_OPEN_RATIO         = 0.76
+MIN_BLINK_FRAMES       = 2
+MAX_BLINK_FRAMES       = 14
+BLINK_ROLLING_WINDOW_S = 60.0
+
+BROW_FURROW_RATIO = 0.88
+BROW_RAISE_RATIO  = 1.14
+EAR_SQUINT_RATIO  = 0.85
 
 
-def clamp(value: float, minimum: float, maximum: float) -> float:
-    return max(minimum, min(maximum, value))
+def clamp(value: float, lo: float = 0.0, hi: float = 1.0) -> float:
+    return max(lo, min(hi, value))
 
 
 class CameraMonitor:
     def __init__(
         self,
         window_seconds: float = 60.0,
-        sample_interval_seconds: float = 0.35,
+        sample_interval_seconds: float = 0.30,
         event_callback=None,
     ) -> None:
         self.window_seconds = window_seconds
         self.sample_interval_seconds = sample_interval_seconds
         self.event_callback = event_callback
+
         self._lock = threading.Lock()
         self._samples: Deque[tuple[float, float]] = deque()
         self._baseline_ears: Deque[float] = deque(maxlen=120)
+
+        self._blink_state = "open"
+        self._blink_frames = 0
+        self._blink_events: Deque[float] = deque()
+
+        self._brow_baseline: Optional[float] = None
+
         self._status = "unavailable"
-        self._message = "Camera monitor unavailable: install cv2 + mediapipe to enable PERCLOS."
+        self._message = "Camera monitor unavailable: install cv2 + mediapipe."
         self._face_detected = False
-        self._eye_aspect_ratio: float | None = None
-        self._closed_threshold: float | None = None
+        self._eye_aspect_ratio: Optional[float] = None
+        self._mouth_open_ratio: Optional[float] = None
+        self._closed_threshold: Optional[float] = None
+        self._expression = "neutral"
         self._frames_processed = 0
+        self._last_status_sig: Optional[tuple[str, str]] = None
+
         self._stop_event = threading.Event()
-        self._thread: threading.Thread | None = None
-        self._last_status_signature: tuple[str, str] | None = None
+        self._thread: Optional[threading.Thread] = None
 
     def start(self) -> None:
-        if self._thread is not None and self._thread.is_alive():
+        if self._thread and self._thread.is_alive():
             return
         self._stop_event.clear()
-        self._thread = threading.Thread(target=self._probe_loop, daemon=True)
+        self._thread = threading.Thread(target=self._probe_loop, daemon=True, name="CameraMonitor")
         self._thread.start()
 
     def stop(self) -> None:
         self._stop_event.set()
-        if self._thread is not None:
-            self._thread.join(timeout=1.0)
+        if self._thread:
+            self._thread.join(timeout=1.5)
 
-    def snapshot(self) -> dict[str, float | str | bool | None]:
+    def snapshot(self) -> dict:
         with self._lock:
             now = time.time()
-            self._prune(now)
-            closed_ratios = [value for _, value in self._samples]
-            perclos = sum(closed_ratios) / len(closed_ratios) if closed_ratios else None
+            self._prune_all(now)
+
+            closed_vals = [v for _, v in self._samples]
+            perclos = sum(closed_vals) / len(closed_vals) if closed_vals else None
+
+            blink_window = [t for t in self._blink_events if t >= now - BLINK_ROLLING_WINDOW_S]
+            elapsed_min = min(BLINK_ROLLING_WINDOW_S, now - (blink_window[0] if blink_window else now)) / 60.0
+            blink_rate = len(blink_window) / max(elapsed_min, 1 / 60) if blink_window else 0.0
+            low_blink = self._face_detected and blink_rate < 8 and len(blink_window) > 0
+
             return {
                 "perclos": round(perclos, 3) if perclos is not None else None,
                 "status": self._status,
                 "message": self._message,
                 "face_detected": self._face_detected,
-                "eye_aspect_ratio": (
-                    round(self._eye_aspect_ratio, 3)
-                    if self._eye_aspect_ratio is not None
-                    else None
-                ),
-                "closed_threshold": (
-                    round(self._closed_threshold, 3)
-                    if self._closed_threshold is not None
-                    else None
-                ),
-                "sample_count": len(closed_ratios),
+                "eye_aspect_ratio": round(self._eye_aspect_ratio, 3) if self._eye_aspect_ratio is not None else None,
+                "mouth_open_ratio": round(self._mouth_open_ratio, 3) if self._mouth_open_ratio is not None else None,
+                "closed_threshold": round(self._closed_threshold, 3) if self._closed_threshold is not None else None,
+                "sample_count": len(closed_vals),
                 "frames_processed": self._frames_processed,
+                "blink_rate_per_min": round(blink_rate, 1),
+                "blink_count_60s": len(blink_window),
+                "low_blink_rate": low_blink,
+                "blink_rate_class": _classify_blink_rate(blink_rate, self._face_detected),
+                "expression": self._expression,
             }
 
     def _probe_loop(self) -> None:
@@ -82,20 +137,18 @@ class CameraMonitor:
             import cv2  # type: ignore
             import mediapipe as mp  # type: ignore
         except Exception:
-            self._set_status(
-                "unavailable",
-                "Camera monitor unavailable: install cv2 + mediapipe to enable PERCLOS.",
-            )
+            self._set_status("unavailable", "Camera unavailable: install cv2 + mediapipe.")
             return
 
-        self._set_status("initializing", "Opening camera and eye tracker.")
-        capture = cv2.VideoCapture(0)
-        if not capture.isOpened():
-            self._set_status("unavailable", "Camera detected but could not be opened.")
+        self._set_status("initializing", "Opening camera...")
+        cap = cv2.VideoCapture(0)
+        if not cap.isOpened():
+            self._set_status("unavailable", "Camera detected but could not open.")
             return
 
-        capture.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
-        capture.set(cv2.CAP_PROP_FRAME_HEIGHT, 360)
+        cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 360)
+
         face_mesh = mp.solutions.face_mesh.FaceMesh(
             max_num_faces=1,
             refine_landmarks=True,
@@ -103,10 +156,10 @@ class CameraMonitor:
             min_tracking_confidence=0.5,
         )
 
+        last_sample_at = 0.0
         try:
-            last_sample_at = 0.0
             while not self._stop_event.is_set():
-                ok, frame = capture.read()
+                ok, frame = cap.read()
                 now = time.time()
                 if not ok:
                     self._set_status("degraded", "Camera frame read failed.")
@@ -115,93 +168,176 @@ class CameraMonitor:
 
                 self._frames_processed += 1
                 if now - last_sample_at < self.sample_interval_seconds:
-                    time.sleep(0.03)
+                    time.sleep(0.02)
                     continue
 
-                rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                result = face_mesh.process(rgb_frame)
-                landmarks = (
-                    result.multi_face_landmarks[0].landmark
-                    if result.multi_face_landmarks
-                    else None
-                )
+                rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                res = face_mesh.process(rgb)
+                lm = res.multi_face_landmarks[0].landmark if res.multi_face_landmarks else None
 
-                if landmarks is None:
-                    self._record_sample(now, None, face_detected=False)
-                    self._set_status("searching", "Camera active, waiting for a face.")
+                if lm is None:
+                    self._record_no_face(now)
+                    self._set_status("searching", "Camera active - no face detected.")
                     last_sample_at = now
                     continue
 
-                ear = self._average_ear(landmarks)
+                ear = self._average_ear(lm)
                 self._baseline_ears.append(ear)
-                threshold = self._closed_eye_threshold()
-                closed_ratio = 1.0 if ear < threshold else 0.0
-                self._record_sample(now, closed_ratio, face_detected=True, ear=ear, threshold=threshold)
+                threshold = self._closed_threshold_from_baseline()
+                is_closed = float(ear < threshold)
+                self._record_sample(now, is_closed, ear=ear, threshold=threshold)
 
-                if closed_ratio >= 1.0:
-                    self._set_status("tracking", "Face tracked. Eyes currently look closed.")
-                else:
-                    self._set_status("tracking", "Face tracked. PERCLOS sampling is active.")
+                self._update_blink_state(ear, threshold, now)
+
+                mar = self._mouth_aspect_ratio(lm)
+                expr = self._detect_expression(lm, ear, threshold, mar)
+
+                with self._lock:
+                    self._face_detected = True
+                    self._eye_aspect_ratio = ear
+                    self._mouth_open_ratio = mar
+                    self._closed_threshold = threshold
+                    self._expression = expr
+
+                self._set_status("tracking", f"Tracking - {expr}")
                 last_sample_at = now
         finally:
             face_mesh.close()
-            capture.release()
+            cap.release()
 
-    def _record_sample(
-        self,
-        now: float,
-        closed_ratio: float | None,
-        *,
-        face_detected: bool,
-        ear: float | None = None,
-        threshold: float | None = None,
-    ) -> None:
+    def _update_blink_state(self, ear: float, threshold: float, now: float) -> None:
+        closing = ear < threshold
+
         with self._lock:
-            if closed_ratio is not None:
-                self._samples.append((now, closed_ratio))
-            self._face_detected = face_detected
-            self._eye_aspect_ratio = ear
+            if self._blink_state == "open":
+                if closing:
+                    self._blink_state = "closing"
+                    self._blink_frames = 1
+            elif self._blink_state == "closing":
+                if closing:
+                    self._blink_frames += 1
+                    if self._blink_frames > MAX_BLINK_FRAMES:
+                        self._blink_state = "open"
+                else:
+                    if self._blink_frames >= MIN_BLINK_FRAMES:
+                        self._blink_events.append(now)
+                    self._blink_state = "open"
+                    self._blink_frames = 0
+
+    def _detect_expression(self, lm, ear: float, threshold: float, mar: float) -> str:
+        open_ref = self._open_eye_reference()
+        if open_ref and threshold < ear < open_ref * EAR_SQUINT_RATIO:
+            return "squinting"
+
+        try:
+            il = lm[INNER_BROW_L]
+            ir = lm[INNER_BROW_R]
+            el = lm[EYE_TOP_L]
+            er = lm[EYE_TOP_R]
+
+            brow_gap = math.hypot(il.x - ir.x, il.y - ir.y)
+
+            if self._brow_baseline is None:
+                self._brow_baseline = brow_gap
+            else:
+                self._brow_baseline = self._brow_baseline * 0.98 + brow_gap * 0.02
+
+            baseline = self._brow_baseline
+            ratio = brow_gap / max(baseline, 1e-6)
+
+            if ratio < BROW_FURROW_RATIO:
+                return "concerned"
+            if ratio > BROW_RAISE_RATIO:
+                return "surprised"
+        except (IndexError, AttributeError):
+            pass
+
+        return "neutral"
+
+    def _record_sample(self, now: float, closed: float, *, ear: float, threshold: float) -> None:
+        with self._lock:
+            self._samples.append((now, closed))
+            self._face_detected = True
             self._closed_threshold = threshold
-            self._prune(now)
+            self._prune_all(now)
 
-    def _closed_eye_threshold(self) -> float:
-        if not self._baseline_ears:
-            return 0.21
-        ordered = sorted(self._baseline_ears)
-        top_slice = ordered[max(len(ordered) // 2, 0) :]
-        open_eye_reference = sum(top_slice) / len(top_slice)
-        return clamp(open_eye_reference * 0.76, 0.18, 0.32)
+    def _record_no_face(self, now: float) -> None:
+        with self._lock:
+            self._face_detected = False
+            self._expression = "neutral"
+            self._prune_all(now)
 
-    def _prune(self, now: float) -> None:
+    def _prune_all(self, now: float) -> None:
         cutoff = now - self.window_seconds
         while self._samples and self._samples[0][0] < cutoff:
             self._samples.popleft()
+        blink_cutoff = now - BLINK_ROLLING_WINDOW_S
+        while self._blink_events and self._blink_events[0] < blink_cutoff:
+            self._blink_events.popleft()
+
+    def _closed_threshold_from_baseline(self) -> float:
+        if not self._baseline_ears:
+            return 0.21
+        ordered = sorted(self._baseline_ears)
+        top_half = ordered[len(ordered) // 2 :]
+        open_ref = sum(top_half) / len(top_half)
+        return clamp(open_ref * EAR_OPEN_RATIO, 0.17, 0.30)
+
+    def _open_eye_reference(self) -> Optional[float]:
+        if not self._baseline_ears:
+            return None
+        ordered = sorted(self._baseline_ears)
+        top_half = ordered[len(ordered) // 2 :]
+        return sum(top_half) / len(top_half)
 
     def _set_status(self, status: str, message: str) -> None:
         with self._lock:
             self._status = status
             self._message = message
-            signature = (status, message)
-
-        if self.event_callback is not None and signature != self._last_status_signature:
+        sig = (status, message)
+        if self.event_callback and sig != self._last_status_sig:
             self.event_callback(f"Camera: {message}", persist=False)
-        self._last_status_signature = signature
+        self._last_status_sig = sig
 
     @staticmethod
-    def _average_ear(landmarks) -> float:
-        left = CameraMonitor._eye_aspect_ratio(landmarks, LEFT_EYE)
-        right = CameraMonitor._eye_aspect_ratio(landmarks, RIGHT_EYE)
-        return (left + right) / 2.0
+    def _average_ear(lm) -> float:
+        return (
+            CameraMonitor._eye_aspect_ratio(lm, LEFT_EYE)
+            + CameraMonitor._eye_aspect_ratio(lm, RIGHT_EYE)
+        ) / 2.0
 
     @staticmethod
-    def _eye_aspect_ratio(landmarks, eye_indices: tuple[int, int, int, int, int, int]) -> float:
-        p1, p2, p3, p4, p5, p6 = [landmarks[index] for index in eye_indices]
-        horizontal = CameraMonitor._distance(p1, p4)
-        if horizontal <= 1e-6:
+    def _eye_aspect_ratio(lm, idxs: tuple[int, int, int, int, int, int]) -> float:
+        p1, p2, p3, p4, p5, p6 = [lm[i] for i in idxs]
+        horiz = CameraMonitor._dist(p1, p4)
+        if horiz <= 1e-6:
             return 0.0
-        vertical = CameraMonitor._distance(p2, p6) + CameraMonitor._distance(p3, p5)
-        return vertical / (2.0 * horizontal)
+        vert = CameraMonitor._dist(p2, p6) + CameraMonitor._dist(p3, p5)
+        return vert / (2.0 * horiz)
 
     @staticmethod
-    def _distance(point_a, point_b) -> float:
-        return math.hypot(point_a.x - point_b.x, point_a.y - point_b.y)
+    def _mouth_aspect_ratio(lm) -> float:
+        left = lm[MOUTH_CORNERS[0]]
+        right = lm[MOUTH_CORNERS[1]]
+        top = lm[MOUTH_LIP_TOP]
+        bottom = lm[MOUTH_LIP_BOT]
+        width = CameraMonitor._dist(left, right)
+        if width <= 1e-6:
+            return 0.0
+        return CameraMonitor._dist(top, bottom) / width
+
+    @staticmethod
+    def _dist(a, b) -> float:
+        return math.hypot(a.x - b.x, a.y - b.y)
+
+
+def _classify_blink_rate(blink_rate: float, face_detected: bool) -> str:
+    if not face_detected:
+        return "no_data"
+    if blink_rate < 8:
+        return "low"
+    if blink_rate > 30:
+        return "high"
+    if 12 <= blink_rate <= 20:
+        return "normal"
+    return "moderate"
