@@ -1,10 +1,6 @@
 from __future__ import annotations
 
 import tkinter as tk
-from dataclasses import dataclass
-
-from classifier import CursorFeatures
-
 
 STATE_STYLES = {
     "steady": {
@@ -28,14 +24,6 @@ STATE_STYLES = {
 }
 
 
-@dataclass(slots=True)
-class OverlayPayload:
-    state: str
-    confidence: float
-    message: str
-    features: CursorFeatures
-
-
 class StatusOverlay:
     def __init__(self, payload_provider, refresh_ms: int = 500) -> None:
         self.payload_provider = payload_provider
@@ -48,8 +36,8 @@ class StatusOverlay:
         self.root.attributes("-alpha", 0.94)
         self.root.configure(bg="#0b1220")
 
-        width = 360
-        height = 138
+        width = 580
+        height = 390
         screen_width = self.root.winfo_screenwidth()
         x = max(screen_width - width - 20, 0)
         y = 20
@@ -87,19 +75,70 @@ class StatusOverlay:
             fg="#cbd5e1",
             anchor="w",
             justify="left",
-            wraplength=320,
+            wraplength=520,
         )
         self.message.pack(anchor="w", fill="x")
 
-        self.metrics = tk.Label(
+        self.summary = tk.Label(
             container,
-            text="speed: 0 px/s | distance: 0 px | turns: 0",
+            text=(
+                "Active app: Unknown\n"
+                "Window: Unknown\n"
+                "Typing: 0 WPM | keys/min: 0 | backspaces: 0\n"
+                "Mouse: 0 px/s | distance: 0 px | clicks: 0 | scrolls: 0\n"
+                "Turns: 0 | idle: -"
+            ),
             font=("Consolas", 9),
             bg="#0b1220",
             fg="#94a3b8",
             anchor="w",
+            justify="left",
         )
-        self.metrics.pack(anchor="w", pady=(10, 0), fill="x")
+        self.summary.pack(anchor="w", pady=(10, 0), fill="x")
+
+        self.open_apps_title = tk.Label(
+            container,
+            text="Open Applications",
+            font=("Segoe UI", 10, "bold"),
+            bg="#0b1220",
+            fg="#e2e8f0",
+            anchor="w",
+        )
+        self.open_apps_title.pack(anchor="w", pady=(12, 2), fill="x")
+
+        self.open_apps = tk.Label(
+            container,
+            text="- Waiting for window scan...",
+            font=("Consolas", 9),
+            bg="#0b1220",
+            fg="#cbd5e1",
+            anchor="w",
+            justify="left",
+            wraplength=520,
+        )
+        self.open_apps.pack(anchor="w", fill="x")
+
+        self.events_title = tk.Label(
+            container,
+            text="Recent Events",
+            font=("Segoe UI", 10, "bold"),
+            bg="#0b1220",
+            fg="#e2e8f0",
+            anchor="w",
+        )
+        self.events_title.pack(anchor="w", pady=(12, 2), fill="x")
+
+        self.events = tk.Label(
+            container,
+            text="- Waiting for activity...",
+            font=("Consolas", 9),
+            bg="#0b1220",
+            fg="#cbd5e1",
+            anchor="w",
+            justify="left",
+            wraplength=520,
+        )
+        self.events.pack(anchor="w", fill="x")
 
         self.hint = tk.Label(
             container,
@@ -120,18 +159,15 @@ class StatusOverlay:
 
     def _refresh(self) -> None:
         snapshot = self.payload_provider()
-        payload = OverlayPayload(
-            state=str(snapshot["state"]),
-            confidence=float(snapshot["confidence"]),
-            message=str(snapshot["message"]),
-            features=snapshot["features"],
-        )
-        self._render(payload)
+        self._render(snapshot)
         self.root.after(self.refresh_ms, self._refresh)
 
-    def _render(self, payload: OverlayPayload) -> None:
-        style = STATE_STYLES.get(payload.state, STATE_STYLES["steady"])
-        confidence = int(payload.confidence * 100)
+    def _render(self, snapshot: dict[str, object]) -> None:
+        cursor = snapshot["cursor"]
+        keyboard = snapshot["keyboard"]
+        system = snapshot["system"]
+        style = STATE_STYLES.get(str(cursor["state"]), STATE_STYLES["steady"])
+        confidence = int(float(cursor["confidence"]) * 100)
 
         self.root.configure(bg=style["bg"])
         self.badge.configure(
@@ -140,23 +176,42 @@ class StatusOverlay:
             fg="#081018",
         )
         self.title.configure(
-            text=self._title_for_state(payload.state),
+            text=self._title_for_state(str(cursor["state"])),
             bg=style["bg"],
             fg=style["text"],
         )
         self.message.configure(
-            text=payload.message,
+            text=str(cursor["message"]),
             bg=style["bg"],
             fg=style["text"],
         )
-        self.metrics.configure(
+        self.summary.configure(
             text=(
-                f"speed: {int(payload.features.average_speed)} px/s"
-                f" | distance: {int(payload.features.total_distance)} px"
-                f" | turns: {payload.features.direction_changes}"
+                f"Active app: {system['active_app']}\n"
+                f"Window: {self._trim_text(str(system['active_window']), 72)}\n"
+                f"Typing: {keyboard['wpm']} WPM | keys/min: {keyboard['keys_per_minute']} | "
+                f"backspaces: {keyboard['backspace_count']}\n"
+                f"Mouse: {int(cursor['features'].average_speed)} px/s | "
+                f"distance: {int(cursor['features'].total_distance)} px | "
+                f"clicks: {cursor['click_count']} | scrolls: {cursor['scroll_count']}\n"
+                f"Turns: {cursor['features'].direction_changes} | "
+                f"idle: {snapshot['idle_seconds'] if snapshot['idle_seconds'] is not None else '-'} s"
             ),
             bg=style["bg"],
+            fg="#dbe4ee",
         )
+        self.open_apps.configure(
+            text=self._format_open_apps(system["open_apps"]),
+            bg=style["bg"],
+            fg="#cbd5e1",
+        )
+        self.events.configure(
+            text=self._format_events(snapshot["recent_events"]),
+            bg=style["bg"],
+            fg="#cbd5e1",
+        )
+        self.open_apps_title.configure(bg=style["bg"])
+        self.events_title.configure(bg=style["bg"])
         self.hint.configure(bg=style["bg"])
 
     @staticmethod
@@ -166,3 +221,25 @@ class StatusOverlay:
         if state == "in_a_hurry":
             return "Cursor suggests the user is in a hurry."
         return "Cursor movement looks steady."
+
+    @staticmethod
+    def _trim_text(value: str, max_length: int) -> str:
+        if len(value) <= max_length:
+            return value
+        return f"{value[: max_length - 3]}..."
+
+    def _format_open_apps(self, open_apps) -> str:
+        if not open_apps:
+            return "- No visible windows detected yet."
+
+        lines = []
+        for app in list(open_apps)[:6]:
+            title = self._trim_text(str(app["title"]), 45)
+            lines.append(f"- {app['name']} | {title}")
+        return "\n".join(lines)
+
+    @staticmethod
+    def _format_events(events) -> str:
+        if not events:
+            return "- No recent events yet."
+        return "\n".join(f"- {event}" for event in list(events)[-6:])

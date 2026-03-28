@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-from cursor_monitor import CursorMonitor
+from activity_monitor import ActivityMonitor
 from overlay import StatusOverlay
 
 
 def main() -> None:
-    monitor = CursorMonitor(window_seconds=4.0)
+    monitor = ActivityMonitor()
     monitor.start()
 
     overlay = StatusOverlay(payload_provider=monitor.snapshot, refresh_ms=500)
