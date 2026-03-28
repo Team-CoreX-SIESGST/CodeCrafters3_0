@@ -1,18 +1,13 @@
 'use client';
 
 import Navbar from "@/components/Navbar";
-import Footer from "@/components/Footer";
 import HeroSection from "@/components/HeroSection";
+import ProblemSection from "@/components/ProblemsSesction";
 import FeaturesSection from "@/components/FeaturesSection";
-
-import HowItWorks from "@/components/HowItWorks";
-import ChatbotPreview from "@/components/ChatbotPreview";
-import CTASection from "@/components/CTASection";
-import FooterCTA from "@/components/Footer";
 import HowItWorksSection from "@/components/HowItWorks";
 import DemoPreviewSection from "@/components/DemoPreviewSection";
 import StatsSection from "@/components/StatsSection";
-import ProblemSection from "@/components/ProblemsSesction";
+import FooterCTA from "@/components/Footer";
 
 export default function Home() {
   return (

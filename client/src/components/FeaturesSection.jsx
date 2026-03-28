@@ -1,14 +1,38 @@
 import { motion, useInView } from "framer-motion";
 import { useRef } from "react";
-import { Brain, Radar, MessageCircle, TrendingUp, Map, GitBranch } from "lucide-react";
+import { Brain, AlertTriangle, MapPin, Activity, Layers, Zap } from "lucide-react";
 
 const features = [
-  { icon: Brain, title: "AI Future Simulator", description: "Run thousands of simulations on your career trajectory using advanced AI models." },
-  { icon: Radar, title: "Skill Gap Radar", description: "Identify missing skills and get personalized learning paths to close the gap." },
-  { icon: MessageCircle, title: "Future Self Chat", description: "Have a conversation with your AI-projected future self for guidance." },
-  { icon: TrendingUp, title: "Career Trend Dashboard", description: "Track emerging industries and roles with real-time labor market intelligence." },
-  { icon: Map, title: "Life GPS Roadmap", description: "Turn your goals into step-by-step actionable milestones with deadlines." },
-  { icon: GitBranch, title: "Decision Impact Analyzer", description: "See how each decision branches into different future outcomes." },
+  {
+    icon: Layers,
+    title: "Attention Residue Meter",
+    description: "Detects when a user has switched tasks but still carries unresolved context from the previous one — the hidden drag that degrades new-task performance.",
+  },
+  {
+    icon: AlertTriangle,
+    title: "Pre-Error Sentinel",
+    description: "Identifies interaction patterns that frequently precede mistakes, stalls, and cognitive breakdowns — surfacing risk before it becomes visible failure.",
+  },
+  {
+    icon: MapPin,
+    title: "Confusion Localization",
+    description: "Pinpoints exactly where users get stuck — across pages, tools, and artifacts — by reading hesitation, re-reads, and navigation reversals.",
+  },
+  {
+    icon: Activity,
+    title: "Flow Integrity Tracking",
+    description: "Distinguishes stable deep-focus windows from fragmented attention states, so interruptions can be timed intelligently rather than arbitrarily.",
+  },
+  {
+    icon: Brain,
+    title: "Recovery Capsule",
+    description: "Preserves task context at the moment of interruption or overload and surfaces the best next step when the user returns — reducing recovery lag.",
+  },
+  {
+    icon: Zap,
+    title: "Productive Struggle Engine",
+    description: "Differentiates healthy cognitive effort from harmful confusion, so adaptive support is offered at the right moment rather than too early or too late.",
+  },
 ];
 
 const FeatureCard = ({ feature, index }) => {
@@ -39,10 +63,10 @@ const FeaturesSection = () => {
       <div className="container mx-auto px-6">
         <div className="text-center mb-16">
           <h2 className="font-heading text-3xl md:text-5xl font-bold text-foreground mb-4">
-            Your Future, <span className="text-gradient-primary">Engineered</span>
+            Six Signals. <span className="text-gradient-primary">One Layer.</span>
           </h2>
           <p className="font-body text-muted-foreground text-lg max-w-xl mx-auto">
-            Six powerful AI modules working together to map your trajectory.
+            Core modules that surface hidden cognitive states from passive interaction patterns.
           </p>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">

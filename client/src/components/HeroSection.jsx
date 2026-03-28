@@ -2,9 +2,9 @@
 import { useEffect, useRef, useState } from "react";
 
 const STATS = [
-  { value: "810K+", label: "Entities Analyzed" },
-  { value: "28", label: "Typologies Detected" },
-  { value: "Multi-hop", label: "Graph Tracing" },
+  { value: "Passive", label: "Signal Collection" },
+  { value: "6", label: "Cognitive States Tracked" },
+  { value: "Real-time", label: "State Inference" },
 ];
 
 // ══════════════════════════════════════════════════════════════════
@@ -70,11 +70,11 @@ const NetworkOrb = () => {
         });
       }
 
-      // 3 suspicious nodes with strong forward Z for visibility
+      // 3 high-signal nodes with strong forward Z for visibility
       [
-        { ox: r * 0.44, oy: -r * 0.54, oz: r * 0.64, id: "NH", score: 94 },
-        { ox: r * 0.83, oy: r * 0.24, oz: r * 0.33, id: "MT", score: 81 },
-        { ox: r * 0.14, oy: r * 0.73, oz: r * 0.5, id: "AL", score: 76 },
+        { ox: r * 0.44, oy: -r * 0.54, oz: r * 0.64, id: "CF", score: 91 },
+        { ox: r * 0.83, oy: r * 0.24, oz: r * 0.33, id: "AR", score: 78 },
+        { ox: r * 0.14, oy: r * 0.73, oz: r * 0.5, id: "FT", score: 65 },
       ].forEach((s) =>
         nds.push({ ...s, flagged: true, r: 7, ph: Math.random() * 6.28 }),
       );
@@ -217,10 +217,10 @@ const NetworkOrb = () => {
       ctx.font = "500 8px 'IBM Plex Mono',monospace";
       ctx.textAlign = "left";
       ctx.fillStyle = "rgba(0,232,122,.42)";
-      ctx.fillText("NET ANALYSIS v2.4", pad + 3, pad + 20);
+      ctx.fillText("COGNITIVE STATE v1.0", pad + 3, pad + 20);
       ctx.fillStyle = "rgba(0,232,122,.22)";
       ctx.fillText(
-        `NODES: ${nodes.length}  EDGES: ${edges.length}`,
+        `SIGNALS: ${nodes.length}  LINKS: ${edges.length}`,
         pad + 3,
         pad + 32,
       );
@@ -234,17 +234,17 @@ const NetworkOrb = () => {
       ctx.textAlign = "right";
       ctx.font = "700 8px 'IBM Plex Mono',monospace";
       ctx.fillStyle = "rgba(239,68,68,.72)";
-      ctx.fillText("⚠ LOOP DETECTED", W - pad - 3, pad + 20);
+      ctx.fillText("⚠ CONFUSION SPIKE", W - pad - 3, pad + 20);
       ctx.font = "500 8px 'IBM Plex Mono',monospace";
       ctx.fillStyle = "rgba(239,68,68,.42)";
-      ctx.fillText("$6.8M · 3 HOPS", W - pad - 3, pad + 32);
-      ctx.fillText("LAYERING PATTERN", W - pad - 3, pad + 44);
+      ctx.fillText("CONF: 91 · 3 MIN", W - pad - 3, pad + 32);
+      ctx.fillText("ATTENTION RESIDUE", W - pad - 3, pad + 44);
 
-      // bottom loop chain
+      // bottom state flow chain
       ctx.textAlign = "center";
       ctx.fillStyle = "rgba(0,232,122,.17)";
       ctx.font = "400 8px 'IBM Plex Mono',monospace";
-      ctx.fillText("NH  →  MT  →  AL  →  NH", W / 2, H - pad - 3);
+      ctx.fillText("FOCUS  →  DRIFT  →  CONFUSION  →  RECOVERY", W / 2, H - pad - 3);
 
       // scan progress bar
       const bw = 70,
@@ -711,7 +711,7 @@ const HeroSection = () => {
                 marginBottom: 20,
               }}
             >
-              Follow the money.
+              See cognitive friction
               <br />
               <em
                 style={{
@@ -720,9 +720,9 @@ const HeroSection = () => {
                   fontWeight: 400,
                 }}
               >
-                Unmask
+                before
               </em>
-              <span style={{ fontWeight: 900 }}> the network.</span>
+              <span style={{ fontWeight: 900 }}> it becomes a mistake.</span>
             </h1>
 
             <p
@@ -735,9 +735,10 @@ const HeroSection = () => {
                 margin: "0 auto 32px",
               }}
             >
-              AML Shield maps fund flows across shell company networks to
-              surface laundering patterns that single‑transaction systems can't
-              see.
+              NeuroTrace transforms interaction patterns into
+              explainable signals of focus, confusion, fatigue, and recovery
+              need — surfacing hidden cognitive friction before it becomes
+              visible failure.
             </p>
 
             <div
@@ -761,7 +762,7 @@ const HeroSection = () => {
                   letterSpacing: ".035em",
                 }}
               >
-                Get Started Today ↗
+                See It in Action ↗
               </a>
               <a
                 href="#how-it-works"
@@ -781,7 +782,7 @@ const HeroSection = () => {
                 How it works
               </a>
               <a
-                href="/chat"
+                href="#features"
                 className="sec-btn"
                 style={{
                   fontSize: 13,
@@ -795,7 +796,7 @@ const HeroSection = () => {
                   color: "var(--muted-foreground)",
                 }}
               >
-                Chat with our AI
+                Explore Features
               </a>
             </div>
 
@@ -920,7 +921,7 @@ const HeroSection = () => {
                 opacity: 0.55,
               }}
             >
-              REAL-TIME ENTITY GRAPH · BVI · CAYMAN · PANAMA · DELAWARE
+              PASSIVE SIGNAL GRAPH · FOCUS · CONFUSION · FATIGUE · RESIDUE
             </p>
           </div>
         </div>

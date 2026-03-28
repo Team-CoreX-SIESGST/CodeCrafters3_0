@@ -1,9 +1,10 @@
 import useScrollReveal from "@/hooks/useScrollReveal";
 
-const txRows = [
-  { from: "Shell Co. A", to: "Shell Co. B", amount: "$2.4M" },
-  { from: "Shell Co. B", to: "Shell Co. C", amount: "$2.1M" },
-  { from: "Shell Co. C", to: "Shell Co. A", amount: "$2.3M" },
+const blindSpots = [
+  { signal: "Cognitively overloaded", status: "invisible" },
+  { signal: "Confused but still active", status: "invisible" },
+  { signal: "Carrying attention residue", status: "invisible" },
+  { signal: "Drifting toward a mistake", status: "invisible" },
 ];
 
 const ProblemSection = () => {
@@ -12,7 +13,7 @@ const ProblemSection = () => {
 
   return (
     <section
-      id="about"
+      id="problem"
       className="py-24 md:py-32 bg-secondary"
     >
       <div
@@ -30,21 +31,23 @@ const ProblemSection = () => {
             THE PROBLEM
           </span>
           <h2 className="mt-6 text-3xl md:text-[42px] leading-[1.15] text-foreground font-serif">
-            Every transaction looks clean.
+            Every session looks productive.
             <br />
-            <span className="font-bold">Until you see the pattern.</span>
+            <span className="font-bold">Until the mistake appears.</span>
           </h2>
           <p className="mt-6 text-[15px] leading-[1.8] text-muted-foreground max-w-md">
-            Modern money laundering routes funds through chains of
-            legitimate-looking shell companies — consulting fees, loan
-            repayments, service invoices. Each transfer appears routine in
-            isolation. Only the network reveals the truth.
+            Digital tools track clicks, sessions, and task completion. But they
+            have no visibility into what is happening cognitively — whether a
+            user is overloaded, carrying unresolved context, or quietly drifting
+            toward a preventable error. Most systems optimize visible
+            productivity while remaining completely blind to hidden cognitive
+            state.
           </p>
           <a
             href="#how-it-works"
             className="mt-6 inline-block text-sm text-primary hover:underline"
           >
-            See how detection works →
+            See how inference works →
           </a>
         </div>
 
@@ -59,35 +62,35 @@ const ProblemSection = () => {
           }}
         >
           <div className="float-card animate-idle-float p-6 w-full max-w-sm" style={{ transform: "rotate(-2deg)" }}>
-            <span className="pill-badge mb-4">⚠ NETWORK FLAGGED</span>
+            <span className="pill-badge mb-4">⚠ COGNITIVE BLIND SPOT</span>
             <h3 className="mt-4 text-xl font-serif text-foreground">
-              Nexus Holdings Ltd
+              Current Tools Cannot See
             </h3>
             <p className="text-xs font-mono text-muted-foreground mt-1">
-              Circular fund flow detected
+              Hidden states active during this session
             </p>
             <p className="mt-4 text-4xl font-mono text-destructive font-semibold">
-              94 <span className="text-lg text-muted-foreground font-normal">/ 100</span>
+              4 <span className="text-lg text-muted-foreground font-normal">states undetected</span>
             </p>
 
             <div className="mt-6 space-y-0">
-              {txRows.map((row, i) => (
+              {blindSpots.map((row, i) => (
                 <div
                   key={i}
                   className="flex items-center justify-between py-3 border-b border-border text-sm"
                 >
                   <span className="text-foreground">
-                    {row.from} → {row.to}
+                    {row.signal}
                   </span>
                   <span className="font-mono text-muted-foreground">
-                    {row.amount}
+                    {row.status}
                   </span>
                 </div>
               ))}
             </div>
 
             <div className="mt-4">
-              <span className="pill-badge-red">Circular flow · 3 hops</span>
+              <span className="pill-badge-red">Passive signals · not yet surfaced</span>
             </div>
           </div>
         </div>

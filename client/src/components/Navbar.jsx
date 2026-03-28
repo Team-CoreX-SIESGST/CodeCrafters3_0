@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { ChevronDown, LogOut, User } from "lucide-react";
 import { useAuth } from "@/contexts/auth-context";
 
-const navLinks = ["How It Works", "Features", "Demo", "About"];
+const navLinks = ["Problem", "Features", "How It Works", "Demo"];
 
 const Navbar = () => {
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -41,11 +41,11 @@ const Navbar = () => {
         <div className="flex items-center gap-2">
           <img
             src="/main-logo.png"
-            alt="AML Shield logo"
+            alt="NeuroTrace logo"
             className="h-8 w-8 rounded-md"
           />
           <span className="font-serif text-lg text-foreground font-semibold tracking-tight">
-            AML Shield
+            NeuroTrace
           </span>
         </div>
 
@@ -60,8 +60,8 @@ const Navbar = () => {
               {link}
             </a>
           ))}
-          <a href="/chat" className="text-sm text-muted-foreground transition-colors hover:text-foreground">
-            Chat with our AI
+          <a href="#about" className="text-sm text-muted-foreground transition-colors hover:text-foreground">
+            About
           </a>
         </div>
 
@@ -71,7 +71,7 @@ const Navbar = () => {
             href="#demo"
             className="btn-primary !py-2 !px-5 text-sm animate-glow-pulse"
           >
-            View Demo
+            See It in Action
           </a>
 
           {!isLoading && (
@@ -166,15 +166,11 @@ const Navbar = () => {
               {link}
             </a>
           ))}
-          <Link
-            href="/chat"
-            className="text-sm text-muted-foreground"
-            onClick={() => setMobileOpen(false)}
-          >
-            Chat with our AI
-          </Link>
+          <a href="#about" className="text-sm text-muted-foreground" onClick={() => setMobileOpen(false)}>
+            About
+          </a>
           <a href="#demo" className="btn-primary !py-2 !px-5 text-sm text-center">
-            View Demo
+            See It in Action
           </a>
           {!isLoading && (
             user ? (

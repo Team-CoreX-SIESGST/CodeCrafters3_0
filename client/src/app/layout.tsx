@@ -29,8 +29,8 @@ const silkscreen = Silkscreen({
 });
 
 export const metadata: Metadata = {
-  title: "AML Shield",
-  description: "AML Shield is a regulatory intelligence workspace",
+  title: "NeuroTrace",
+  description: "NeuroTrace — cognitive observability for digital work. Detect focus, confusion, fatigue, and attention residue from interaction patterns.",
   icons: {
     icon: "/main-logo.png",
     shortcut: "/main-logo.png",

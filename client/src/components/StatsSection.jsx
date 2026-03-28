@@ -1,10 +1,10 @@
 import useCountUp from "@/hooks/useCountUp";
 
 const stats = [
-  { end: 810, suffix: "K+", label: "Offshore entities" },
-  { end: 28, suffix: "", label: "Laundering typologies" },
-  { end: 6, suffix: "", label: "Jurisdictions covered" },
-  { end: 94, suffix: "%", label: "Detection accuracy" },
+  { end: 87, suffix: "%", label: "Confusion hotspots surfaced" },
+  { end: 3, suffix: "×", label: "Faster context recovery" },
+  { end: 62, suffix: "%", label: "Risky transitions flagged early" },
+  { end: 91, suffix: "%", label: "Pre-error moments identified" },
 ];
 
 const StatsSection = () => {
