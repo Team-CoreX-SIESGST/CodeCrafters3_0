@@ -29,13 +29,15 @@ class KeyboardMonitor:
         self.window_seconds = window_seconds
         self.event_callback = event_callback
         self.samples: Deque[KeySample] = deque()
+        self.hold_durations: Deque[tuple[float, float]] = deque()
         self._lock = threading.Lock()
+        self._active_presses: dict[str, float] = {}
         self._last_key_timestamp: float | None = None
         self._last_typing_log: float = 0.0
         self.listener: keyboard.Listener | None = None
 
     def start(self) -> None:
-        self.listener = keyboard.Listener(on_press=self._on_press)
+        self.listener = keyboard.Listener(on_press=self._on_press, on_release=self._on_release)
         self.listener.daemon = True
         self.listener.start()
 
@@ -46,6 +48,7 @@ class KeyboardMonitor:
     def _on_press(self, key) -> None:
         now = time.time()
         self._last_key_timestamp = now
+        key_id = self._key_id(key)
 
         sample = KeySample(
             timestamp=now,
@@ -68,6 +71,8 @@ class KeyboardMonitor:
 
         with self._lock:
             self.samples.append(sample)
+            if key_id not in self._active_presses:
+                self._active_presses[key_id] = now
             self._prune(now)
 
         if self.event_callback is None:
@@ -85,11 +90,21 @@ class KeyboardMonitor:
             self.event_callback("Keyboard: typing activity")
             self._last_typing_log = now
 
+    def _on_release(self, key) -> None:
+        now = time.time()
+        key_id = self._key_id(key)
+        with self._lock:
+            pressed_at = self._active_presses.pop(key_id, None)
+            if pressed_at is not None:
+                self.hold_durations.append((now, max((now - pressed_at) * 1000.0, 0.0)))
+            self._prune(now)
+
     def snapshot(self) -> dict[str, float | int | None | list[float]]:
         with self._lock:
             now = time.time()
             self._prune(now)
             samples = list(self.samples)
+            hold_durations = [value for _, value in self.hold_durations]
 
         if not samples:
             return self._empty_snapshot(now)
@@ -103,22 +118,30 @@ class KeyboardMonitor:
         modifier_count = sum(1 for sample in samples if sample.is_modifier)
         duration = max(samples[-1].timestamp - samples[0].timestamp, 1.0)
         burst_lengths = self._burst_lengths(samples)
+        pause_count = max(len(burst_lengths) - 1, 0)
         burst_length = sum(burst_lengths) / len(burst_lengths) if burst_lengths else 0.0
+        hold_mean_ms = sum(hold_durations) / len(hold_durations) if hold_durations else 0.0
         wpm = (printable_chars / 5.0) / (duration / 60.0)
         keys_per_minute = total_keys / duration * 60.0
+        backspace_count = sum(1 for sample in samples if sample.is_backspace)
+        delete_count = sum(1 for sample in samples if sample.is_delete)
 
         return {
             "wpm": round(wpm, 1),
             "keys_per_minute": round(keys_per_minute, 1),
-            "backspace_count": sum(1 for sample in samples if sample.is_backspace),
-            "delete_count": sum(1 for sample in samples if sample.is_delete),
+            "backspace_count": backspace_count,
+            "delete_count": delete_count,
+            "backspace_ratio": round(backspace_count / total_keys, 3) if total_keys else 0.0,
             "modifier_count": modifier_count,
             "total_keys": total_keys,
             "error_rate": round(error_count / total_keys, 3) if total_keys else 0.0,
             "iki_mean": round(iki_mean, 3),
             "iki_std": round(iki_std, 3),
+            "hold_mean_ms": round(hold_mean_ms, 1),
             "burst_length": round(burst_length, 2),
             "burst_count": len(burst_lengths),
+            "pause_count": pause_count,
+            "pause_freq_per_min": round(pause_count / duration * 60.0, 2),
             "seconds_since_last_key": round(now - self._last_key_timestamp, 1)
             if self._last_key_timestamp
             else None,
@@ -136,8 +159,12 @@ class KeyboardMonitor:
             "error_rate": 0.0,
             "iki_mean": 0.0,
             "iki_std": 0.0,
+            "hold_mean_ms": 0.0,
             "burst_length": 0.0,
             "burst_count": 0,
+            "pause_count": 0,
+            "pause_freq_per_min": 0.0,
+            "backspace_ratio": 0.0,
             "seconds_since_last_key": round(now - self._last_key_timestamp, 1)
             if self._last_key_timestamp
             else None,
@@ -148,6 +175,11 @@ class KeyboardMonitor:
         cutoff = now - self.window_seconds
         while self.samples and self.samples[0].timestamp < cutoff:
             self.samples.popleft()
+        while self.hold_durations and self.hold_durations[0][0] < cutoff:
+            self.hold_durations.popleft()
+        stale_keys = [key for key, pressed_at in self._active_presses.items() if pressed_at < cutoff]
+        for key in stale_keys:
+            self._active_presses.pop(key, None)
 
     @staticmethod
     def _inter_key_intervals(samples: list[KeySample]) -> list[float]:
@@ -190,3 +222,13 @@ class KeyboardMonitor:
     def _is_printable(key) -> bool:
         char = getattr(key, "char", None)
         return isinstance(char, str) and len(char) == 1 and char.isprintable()
+
+    @staticmethod
+    def _key_id(key) -> str:
+        vk = getattr(key, "vk", None)
+        if vk is not None:
+            return f"vk:{vk}"
+        char = getattr(key, "char", None)
+        if isinstance(char, str) and char:
+            return f"char:{char}"
+        return str(key)

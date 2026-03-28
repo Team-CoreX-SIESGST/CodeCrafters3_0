@@ -28,6 +28,7 @@ class CursorMonitor:
         self.samples: Deque[CursorSample] = deque()
         self.click_times: Deque[float] = deque()
         self.scroll_times: Deque[float] = deque()
+        self.scroll_directions: Deque[tuple[float, int]] = deque()
         self.click_dwells: Deque[tuple[float, float]] = deque()
         self._press_times: dict[str, float] = {}
         self._lock = threading.Lock()
@@ -98,6 +99,8 @@ class CursorMonitor:
         self._last_input_timestamp = now
         with self._lock:
             self.scroll_times.append(now)
+            if dy != 0:
+                self.scroll_directions.append((now, 1 if dy > 0 else -1))
             self._prune(now)
 
         if self.event_callback is not None and now - self._last_scroll_log > 1.0:
@@ -113,6 +116,8 @@ class CursorMonitor:
             self.click_times.popleft()
         while self.scroll_times and self.scroll_times[0] < cutoff:
             self.scroll_times.popleft()
+        while self.scroll_directions and self.scroll_directions[0][0] < cutoff:
+            self.scroll_directions.popleft()
         while self.click_dwells and self.click_dwells[0][0] < cutoff:
             self.click_dwells.popleft()
 
@@ -123,6 +128,7 @@ class CursorMonitor:
             samples = list(self.samples)
             click_times = list(self.click_times)
             scroll_times = list(self.scroll_times)
+            scroll_directions = list(self.scroll_directions)
             click_dwell_values = [value for _, value in self.click_dwells]
 
         duration_seconds = self.window_seconds
@@ -143,11 +149,15 @@ class CursorMonitor:
         click_dwell = (
             sum(click_dwell_values) / len(click_dwell_values) if click_dwell_values else 0.0
         )
+        direction_changes = self._direction_changes(samples)
+        scroll_reversals = self._scroll_reversals(scroll_directions)
 
         return {
             "cursor_speed": round(cursor_speed, 2),
             "path_linearity": round(min(max(path_linearity, 0.0), 1.0), 3),
             "click_dwell": round(click_dwell, 3),
+            "direction_changes": direction_changes,
+            "scroll_reversals": scroll_reversals,
             "total_distance": round(total_distance, 2),
             "straight_line_distance": round(straight_line_distance, 2),
             "click_count": len(click_times),
@@ -157,3 +167,37 @@ class CursorMonitor:
             ) if self._last_input_timestamp else None,
             "activity_timestamps": [sample.timestamp for sample in samples] + click_times + scroll_times,
         }
+
+    @staticmethod
+    def _direction_changes(samples: list[CursorSample]) -> int:
+        if len(samples) < 3:
+            return 0
+        changes = 0
+        prev_dx = 0.0
+        prev_dy = 0.0
+        prev_sample = samples[0]
+        for sample in samples[1:]:
+            dx = sample.x - prev_sample.x
+            dy = sample.y - prev_sample.y
+            if (dx or dy) and (prev_dx or prev_dy):
+                dot = prev_dx * dx + prev_dy * dy
+                mag = math.hypot(prev_dx, prev_dy) * math.hypot(dx, dy)
+                if mag > 0:
+                    cos_theta = max(-1.0, min(1.0, dot / mag))
+                    if math.degrees(math.acos(cos_theta)) >= 60.0:
+                        changes += 1
+            if dx or dy:
+                prev_dx = dx
+                prev_dy = dy
+            prev_sample = sample
+        return changes
+
+    @staticmethod
+    def _scroll_reversals(scroll_directions: list[tuple[float, int]]) -> int:
+        reversals = 0
+        previous_direction = 0
+        for _, direction in scroll_directions:
+            if previous_direction and direction != previous_direction:
+                reversals += 1
+            previous_direction = direction
+        return reversals

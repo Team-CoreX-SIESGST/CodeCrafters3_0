@@ -31,6 +31,13 @@ const serialiseDate = (value) => {
   return date ? date.toISOString() : null;
 };
 
+const sortByDateDesc = (items, field) =>
+  [...items].sort((left, right) => {
+    const leftTime = safeDate(left?.[field])?.getTime() || 0;
+    const rightTime = safeDate(right?.[field])?.getTime() || 0;
+    return rightTime - leftTime;
+  });
+
 const average = (values) => {
   if (!values.length) return 0;
   return round(values.reduce((sum, value) => sum + value, 0) / values.length);
@@ -74,6 +81,57 @@ async function fetchLiveDashboard() {
   } finally {
     clearTimeout(timeout);
   }
+}
+
+async function fetchMongoDashboardData(userId = "") {
+  if (mongoose.connection.readyState !== 1 || !mongoose.connection.db) {
+    return {
+      connected: false,
+      userId: userId || null,
+      snapshots: [],
+      events: [],
+      artifacts: [],
+      confusionEpisodes: [],
+      residueEvents: 0,
+      preErrorEvents: 0,
+      fatigueEvents: 0,
+      handoffCapsules: 0,
+    };
+  }
+
+  const filter = userId ? { user_id: userId } : {};
+  const [
+    snapshots,
+    events,
+    artifacts,
+    confusionEpisodes,
+    residueEvents,
+    preErrorEvents,
+    fatigueEvents,
+    handoffCapsules,
+  ] = await Promise.all([
+    collection("snapshots").find(filter).sort({ generated_at: -1 }).limit(120).toArray(),
+    collection("events").find(filter).sort({ created_at: -1 }).limit(12).toArray(),
+    collection("artifacts").find(filter).sort({ created_at: -1 }).limit(40).toArray(),
+    collection("confusion_episodes").find(filter).sort({ started_at: -1 }).limit(8).toArray(),
+    collection("attention_residue_events").countDocuments(filter),
+    collection("pre_error_events").countDocuments(filter),
+    collection("fatigue_events").countDocuments(filter),
+    collection("handoff_capsules").countDocuments(filter),
+  ]);
+
+  return {
+    connected: true,
+    userId: userId || null,
+    snapshots,
+    events,
+    artifacts,
+    confusionEpisodes,
+    residueEvents,
+    preErrorEvents,
+    fatigueEvents,
+    handoffCapsules,
+  };
 }
 
 function buildStateDistribution(snapshots) {
@@ -247,37 +305,56 @@ function mapLiveCurrent(liveData) {
 
 export const getCognitiveDashboard = async (_req, res) => {
   try {
-    if (mongoose.connection.readyState !== 1 || !mongoose.connection.db) {
+    const mongoConnected = mongoose.connection.readyState === 1 && !!mongoose.connection.db;
+
+    const liveDashboard = await fetchLiveDashboard();
+
+    const liveData = liveDashboard.data || {};
+    const liveUserId = normaliseLabel(liveData?.current?.user_id, "");
+    const liveHistory = Array.isArray(liveData.history) ? liveData.history : [];
+    const liveSnapshots = liveHistory.length
+      ? liveHistory
+      : liveData.current
+        ? [liveData.current]
+        : [];
+    const mongoData = await fetchMongoDashboardData(liveUserId);
+    const useMongoAnalytics = mongoData.connected && mongoData.snapshots.length > 0;
+    const useLiveAnalytics = !useMongoAnalytics && liveDashboard.connected && liveSnapshots.length > 0;
+
+    const snapshots = useMongoAnalytics
+      ? mongoData.snapshots
+      : sortByDateDesc(liveSnapshots, "generated_at");
+    const events = useMongoAnalytics
+      ? mongoData.events
+      : sortByDateDesc(Array.isArray(liveData.events) ? liveData.events : [], "created_at");
+    const artifacts = useMongoAnalytics
+      ? mongoData.artifacts
+      : sortByDateDesc(Array.isArray(liveData.friction_hotspots) ? liveData.friction_hotspots : [], "created_at");
+    const confusionEpisodes = useMongoAnalytics
+      ? mongoData.confusionEpisodes
+      : sortByDateDesc(Array.isArray(liveData.confusion_episodes) ? liveData.confusion_episodes : [], "started_at");
+    const residueEvents = useMongoAnalytics
+      ? mongoData.residueEvents
+      : (Array.isArray(liveData.attention_residue_events) ? liveData.attention_residue_events.length : 0);
+    const preErrorEvents = useMongoAnalytics
+      ? mongoData.preErrorEvents
+      : (Array.isArray(liveData.pre_error_events) ? liveData.pre_error_events.length : 0);
+    const fatigueEvents = useMongoAnalytics
+      ? mongoData.fatigueEvents
+      : (Array.isArray(liveData.fatigue_events) ? liveData.fatigue_events.length : 0);
+    const handoffCapsules = useMongoAnalytics
+      ? mongoData.handoffCapsules
+      : (Array.isArray(liveData.handoff_capsules) ? liveData.handoff_capsules.length : 0);
+
+    if (!snapshots.length && !liveDashboard.connected && !mongoData.connected) {
       return res.status(503).json({
         ok: false,
-        message: "MongoDB is not connected yet.",
+        message: "Neither the live cognitive backend nor MongoDB analytics are available.",
       });
     }
 
-    const [
-      snapshots,
-      events,
-      artifacts,
-      confusionEpisodes,
-      residueEvents,
-      preErrorEvents,
-      fatigueEvents,
-      handoffCapsules,
-      liveDashboard,
-    ] = await Promise.all([
-      collection("snapshots").find({}).sort({ generated_at: -1 }).limit(120).toArray(),
-      collection("events").find({}).sort({ created_at: -1 }).limit(12).toArray(),
-      collection("artifacts").find({}).sort({ created_at: -1 }).limit(40).toArray(),
-      collection("confusion_episodes").find({}).sort({ started_at: -1 }).limit(8).toArray(),
-      collection("attention_residue_events").countDocuments(),
-      collection("pre_error_events").countDocuments(),
-      collection("fatigue_events").countDocuments(),
-      collection("handoff_capsules").countDocuments(),
-      fetchLiveDashboard(),
-    ]);
-
     const distribution = buildStateDistribution(snapshots);
-    const latestSnapshot = snapshots[0] || null;
+    const latestSnapshot = snapshots[0] || liveData.current || null;
     const liveCurrent = mapLiveCurrent(liveDashboard.data);
     const timeline = buildTimeline(snapshots);
 
@@ -343,10 +420,12 @@ export const getCognitiveDashboard = async (_req, res) => {
       ok: true,
       generatedAt: new Date().toISOString(),
       source: {
-        mongoConnected: true,
+        mongoConnected,
         liveConnected: liveDashboard.connected,
         liveUrl: LIVE_API_BASE,
         liveError: liveDashboard.error,
+        analyticsSource: useMongoAnalytics ? "cognitive_snapshots" : "live_backend",
+        analyticsUserId: useMongoAnalytics ? mongoData.userId : liveUserId || null,
       },
       summary,
       live: {

@@ -13,14 +13,19 @@ FEATURE_COLS = [
 class FlowGuardianInference:
     def __init__(self, model_dir: str = "ml/models", seq_len: int = 5):
         self.seq_len = seq_len
-        model_path = Path(model_dir) / "flow_guardian.onnx"
+        base_dir = Path(__file__).resolve().parent
+        model_root = Path(model_dir)
+        if not model_root.is_absolute():
+            model_root = (base_dir / model_root).resolve()
+        model_path = model_root / "flow_guardian.onnx"
         
         # CPU execution provider explicitly configured for broad compatibility
         self.session = ort.InferenceSession(str(model_path), providers=["CPUExecutionProvider"])
+        self.input_name = self.session.get_inputs()[0].name
         
         # Load min/max values for input normalization
-        self.x_min = np.load(str(Path(model_dir) / "normalisation_min.npy"))
-        self.x_max = np.load(str(Path(model_dir) / "normalisation_max.npy"))
+        self.x_min = np.load(str(model_root / "normalisation_min.npy"))
+        self.x_max = np.load(str(model_root / "normalisation_max.npy"))
         
         self.history = []
 
@@ -38,6 +43,7 @@ class FlowGuardianInference:
             
         # 2. Normalize inputs to [0, 1] scale exactly as done during training
         feat_norm = (feat_array - self.x_min) / (self.x_max - self.x_min + 1e-8)
+        feat_norm = np.clip(feat_norm, 0.0, 1.0).astype(np.float32, copy=False)
         
         # 3. Queue management
         self.history.append(feat_norm)
@@ -52,7 +58,7 @@ class FlowGuardianInference:
         seq_batch = np.expand_dims(seq, axis=0) # shape: (1, 5, 18)
         
         # 5. Run low-latency inference
-        outputs = self.session.run(None, {"telemetry": seq_batch})
+        outputs = self.session.run(None, {self.input_name: seq_batch})
         
         # Unpack the 8 model output heads
         state_logits  = outputs[0][0]
@@ -73,11 +79,11 @@ class FlowGuardianInference:
         
         return {
             "cognitive_state": state_names[state_idx],
-            "attention_residue": float(residue_pred),
-            "pre_error_prob": float(preerr_pred),
-            "interruptibility": float(intrpt_pred),
-            "capsule_trigger": float(capsule_pred),
+            "attention_residue": float(np.asarray(residue_pred).reshape(-1)[0]),
+            "pre_error_prob": float(np.asarray(preerr_pred).reshape(-1)[0]),
+            "interruptibility": float(np.asarray(intrpt_pred).reshape(-1)[0]),
+            "capsule_trigger": float(np.asarray(capsule_pred).reshape(-1)[0]),
             "struggle_type": struggle_names[struggle_idx],
-            "confusion_friction": float(friction_pred),
-            "personal_deviation": float(dev_pred),
+            "confusion_friction": float(np.asarray(friction_pred).reshape(-1)[0]),
+            "personal_deviation": float(np.asarray(dev_pred).reshape(-1)[0]),
         }

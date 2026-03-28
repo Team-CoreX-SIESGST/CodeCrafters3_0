@@ -38,7 +38,10 @@ from classifier       import CognitiveStateClassifier, FeatureVector
 from cursor_monitor   import CursorMonitor
 from keyboard_monitor import KeyboardMonitor
 from time_tracker     import TimeTracker
-from onnx_inference   import FlowGuardianInference
+try:
+    from onnx_inference import FlowGuardianInference
+except Exception:
+    FlowGuardianInference = None
 
 
 # ── Environment ───────────────────────────────────────────────────────────────
@@ -84,6 +87,8 @@ CAL_APPS  = ("calendar", "meet", "zoom")
 
 WINDOW_SECONDS   = 30.0
 IDLE_GAP_SECONDS =  2.0
+ML_INFERENCE_INTERVAL_SECONDS = WINDOW_SECONDS
+ML_RESULT_STALE_SECONDS = WINDOW_SECONDS * 2.5
 
 
 def utcnow() -> datetime:
@@ -358,6 +363,8 @@ class ActivityMonitor:
                      "first_seen": utcnow().isoformat()}
         )
         self._last_artifact_id: str | None = None
+        self._artifact_entered_at_ts = time.time()
+        self._app_switch_timestamps: deque[float] = deque(maxlen=240)
 
         # Session timing
         self._session_started_at = utcnow()
@@ -381,14 +388,20 @@ class ActivityMonitor:
         self._last_focus_context: dict[str, Any] | None = None
 
         # --- ML Integration ---
-        try:
-            self.inference_engine = FlowGuardianInference()
-        except Exception as e:
-            print(f"Warning: ONNX Engine failed to load ({e}).")
+        if FlowGuardianInference is None:
+            print("Warning: ONNX Engine unavailable (missing optional ML dependencies).")
             self.inference_engine = None
+        else:
+            try:
+                self.inference_engine = FlowGuardianInference()
+            except Exception as e:
+                print(f"Warning: ONNX Engine failed to load ({e}).")
+                self.inference_engine = None
             
         self.last_inference_time = 0.0
         self.latest_ml_state = None
+        self.last_ml_result_time = 0.0
+        self.latest_ml_features: dict[str, float] | None = None
 
         # ── Sub-monitors ──────────────────────────────────────────────────
         self.cursor_monitor   = CursorMonitor(window_seconds=WINDOW_SECONDS, event_callback=self.record_event)
@@ -806,6 +819,79 @@ class ActivityMonitor:
         self._last_focus_context = focus_context
 
     # ── Core snapshot ─────────────────────────────────────────────────────────
+    def _prune_switch_history(self, now_ts: float) -> None:
+        cutoff = now_ts - WINDOW_SECONDS
+        while self._app_switch_timestamps and self._app_switch_timestamps[0] < cutoff:
+            self._app_switch_timestamps.popleft()
+
+    def _active_ml_state(self, now_ts: float) -> dict[str, Any] | None:
+        if not isinstance(self.latest_ml_state, dict):
+            return None
+        if now_ts - self.last_ml_result_time > ML_RESULT_STALE_SECONDS:
+            return None
+        return self.latest_ml_state
+
+    def _build_ml_features(
+        self,
+        *,
+        keyboard: dict[str, Any],
+        cursor: dict[str, Any],
+        camera: dict[str, Any],
+        idle_ratio: float,
+        app_switches: int,
+        dwell_seconds: float,
+    ) -> dict[str, float]:
+        perclos = camera.get("perclos")
+        ear_mean = camera.get("ear_mean", camera.get("eye_aspect_ratio"))
+        return {
+            "iki_mean_ms": float(keyboard.get("iki_mean", 0.0)) * 1000.0,
+            "iki_std_ms": float(keyboard.get("iki_std", 0.0)) * 1000.0,
+            "hold_mean_ms": float(keyboard.get("hold_mean_ms", 0.0)),
+            "backspace_ratio": float(keyboard.get("backspace_ratio", 0.0)),
+            "burst_length": float(keyboard.get("burst_length", 0.0)),
+            "wpm": float(keyboard.get("wpm", 0.0)),
+            "pause_freq_per_min": float(keyboard.get("pause_freq_per_min", 0.0)),
+            "mouse_speed_px_s": float(cursor.get("cursor_speed", 0.0)),
+            "path_linearity": float(cursor.get("path_linearity", 0.0)),
+            "click_dwell_ms": float(cursor.get("click_dwell", 0.0)) * 1000.0,
+            "direction_changes": float(cursor.get("direction_changes", 0.0)),
+            "idle_ratio": float(idle_ratio),
+            "scroll_reversals": float(cursor.get("scroll_reversals", 0.0)),
+            "perclos": float(perclos) if isinstance(perclos, (int, float)) else 0.0,
+            "blink_rate_per_min": float(camera.get("blink_rate_per_min", 0.0)),
+            "ear_mean": float(ear_mean) if isinstance(ear_mean, (int, float)) else 0.0,
+            "app_switches": float(app_switches),
+            "dwell_seconds": float(max(dwell_seconds, 0.0)),
+        }
+
+    def _run_ml_inference(self, *, now_ts: float, ml_features: dict[str, float]) -> None:
+        if not self.inference_engine:
+            return
+        if now_ts - self.last_inference_time < ML_INFERENCE_INTERVAL_SECONDS:
+            return
+
+        self.last_inference_time = now_ts
+        self.latest_ml_features = ml_features
+        try:
+            ml_result = self.inference_engine.infer(ml_features)
+        except Exception as exc:
+            print(f"ML Inference Error: {exc}")
+            return
+
+        if not ml_result:
+            return
+
+        previous_state = (
+            str(self.latest_ml_state.get("cognitive_state", ""))
+            if isinstance(self.latest_ml_state, dict)
+            else ""
+        )
+        self.latest_ml_state = ml_result
+        self.last_ml_result_time = now_ts
+        current_state = str(ml_result.get("cognitive_state", ""))
+        if current_state and current_state != previous_state:
+            self.record_event(f"ML State inferred: {current_state.capitalize()}")
+
     def snapshot(self) -> dict[str, Any]:
         with self._snapshot_lock:
             now_ts = time.time()
@@ -858,47 +944,25 @@ class ActivityMonitor:
             )
             idle_ratio = _compute_idle_ratio(now_ts, activity_timestamps, WINDOW_SECONDS)
 
-            # --- ML Inference Run (Every 5 seconds) ---
-            now = time.time()
-            if self.inference_engine and (now - self.last_inference_time) > 5.0:
-                self.last_inference_time = now
-                
-                try:
-                    c_feats = cursor.get("features")
-                    wpm = keyboard.get("wpm", 0)
-                    
-                    # Approximate inter-key interval
-                    iki_mean = (60000.0 / (wpm * 5.0)) if wpm > 0 else 250.0
-                    iki_mean = max(50.0, min(800.0, iki_mean))
-                    
-                    ml_features = {
-                        "iki_mean_ms": iki_mean,
-                        "iki_std_ms": 20.0, # Placeholder until detailed variance tracking
-                        "hold_mean_ms": 85.0, # Placeholder
-                        "backspace_ratio": keyboard.get("backspace_count", 0) / max(1, keyboard.get("total_keys", 1)),
-                        "burst_length": keyboard.get("total_keys", 0) / 2.0,
-                        "wpm": wpm,
-                        "mouse_speed_px_s": c_feats.average_speed if c_feats else 0.0,
-                        "path_linearity": getattr(c_feats, "path_linearity", 0.82) if c_feats else 0.82,
-                        "click_dwell_ms": getattr(c_feats, "click_dwell", 120.0) if c_feats else 120.0,
-                        "direction_changes": getattr(c_feats, "direction_changes", 0.0) if c_feats else 0.0,
-                        "idle_ratio": idle_ratio,
-                        "scroll_reversals": cursor.get("scroll_count", 0) / 2.0,
-                        "perclos": camera.get("perclos", 0.05) if camera and "perclos" in camera else 0.05,
-                        "blink_rate_per_min": camera.get("blink_rate_per_min", 17.0) if camera else 17.0,
-                        "ear_mean": 0.32,
-                        "app_switches": 0.0,
-                        "dwell_seconds": 180.0
-                    }
-                    
-                    ml_result = self.inference_engine.infer(ml_features)
-                    if ml_result:
-                        self.latest_ml_state = ml_result
-                        self.record_event(f"ML State inferred: {ml_result['cognitive_state'].capitalize()}")
-                        
-                except Exception as e:
-                    print(f"ML Inference Error: {e}")
-            # ----------------------------------------
+            artifact_id = hashlib.sha1(f"{active_app}::{active_window}".encode()).hexdigest()[:16]
+            switched = artifact_id != self._last_artifact_id
+            stats = self._artifact_stats[artifact_id]
+            self._prune_switch_history(now_ts)
+            preview_switches = list(self._app_switch_timestamps)
+            if switched:
+                preview_switches.append(now_ts)
+            app_switches_window = len([ts for ts in preview_switches if ts >= now_ts - WINDOW_SECONDS])
+            dwell_seconds_window = 0.0 if switched else max(now_ts - self._artifact_entered_at_ts, 0.0)
+            ml_features = self._build_ml_features(
+                keyboard=keyboard,
+                cursor=cursor,
+                camera=camera,
+                idle_ratio=idle_ratio,
+                app_switches=app_switches_window,
+                dwell_seconds=dwell_seconds_window,
+            )
+            self._run_ml_inference(now_ts=now_ts, ml_features=ml_features)
+            ml_state = self._active_ml_state(now_ts)
 
             # ── Feature vector ────────────────────────────────────────────
             perclos = camera.get("perclos")
@@ -939,14 +1003,12 @@ class ActivityMonitor:
             break_age   = max((now - self._last_break_at).total_seconds()      / 60.0, 0.1)
 
             # ── Artifact fingerprinting ───────────────────────────────────
-            artifact_id = hashlib.sha1(f"{active_app}::{active_window}".encode()).hexdigest()[:16]
-            switched    = artifact_id != self._last_artifact_id
-            stats       = self._artifact_stats[artifact_id]
-
             if switched:
                 if int(stats["visits"]) > 0:
                     stats["revisits"] = int(stats["revisits"]) + 1
                 stats["visits"] = int(stats["visits"]) + 1
+                self._app_switch_timestamps.append(now_ts)
+                self._artifact_entered_at_ts = now_ts
                 self.record_event(f"Task switch → {active_app}")
                 self._emit_recovery_capsule(active_app, active_window, artifact_id, now)
                 self._last_artifact_id = artifact_id
@@ -1052,6 +1114,40 @@ class ActivityMonitor:
             )
 
             # ── Passive Comprehension Gap ─────────────────────────────────
+            if ml_state:
+                ml_attention = clamp(float(ml_state.get("attention_residue", attention_residue)))
+                ml_pre_error = clamp(float(ml_state.get("pre_error_prob", pre_error_risk)))
+                ml_interrupt = clamp(float(ml_state.get("interruptibility", interruptibility)))
+                ml_friction = clamp(float(ml_state.get("confusion_friction", confusion_risk)))
+                ml_cognitive = str(ml_state.get("cognitive_state", "")).lower()
+                ml_struggle = str(ml_state.get("struggle_type", "")).lower()
+
+                attention_residue = clamp(attention_residue * 0.45 + ml_attention * 0.55)
+                pre_error_risk = clamp(pre_error_risk * 0.45 + ml_pre_error * 0.55)
+                interruptibility = clamp(interruptibility * 0.45 + ml_interrupt * 0.55)
+
+                confusion_target = clamp(
+                    ml_friction
+                    + (0.20 if ml_cognitive == "confused" else 0.0)
+                    + (0.12 if ml_struggle == "harmful" else 0.0)
+                    - (0.06 if ml_struggle == "productive" else 0.0)
+                )
+                confusion_risk = clamp(confusion_risk * 0.60 + confusion_target * 0.40)
+
+                if ml_cognitive == "focused":
+                    focus_depth = clamp(focus_depth + 0.10)
+                    fatigue_risk = clamp(fatigue_risk - 0.04)
+                elif ml_cognitive == "confused":
+                    focus_depth = clamp(focus_depth - 0.10)
+                elif ml_cognitive == "fatigued":
+                    fatigue_risk = clamp(fatigue_risk + 0.14)
+                    focus_depth = clamp(focus_depth - 0.16)
+
+                if ml_struggle == "harmful":
+                    focus_depth = clamp(focus_depth - 0.06)
+                elif ml_struggle == "productive":
+                    focus_depth = clamp(focus_depth + 0.03)
+
             passive_gap = clamp(
                 0.06
                 + clamp(scroll_reversals / 6.0,         0, 0.22)
@@ -1141,6 +1237,7 @@ class ActivityMonitor:
                 fatigue_risk     = fatigue_risk,
                 classifier_state = classification.state,
                 perclos          = perclos_f,
+                ml_state         = ml_state,
             )
 
             # ── Store artifact friction ───────────────────────────────────
@@ -1186,6 +1283,7 @@ class ActivityMonitor:
 
                 "state": {
                     "name":                 classification.state,
+                    "detection_source":     "ml_assisted" if ml_state else "heuristic",
                     "confidence":           classification.confidence,
                     "message":              classification.message,
                     "scores":               classification.scores,
@@ -1209,7 +1307,7 @@ class ActivityMonitor:
                 "idle_seconds":  idle_seconds,
                 "recent_events": recent_events,
                 "scores":        scores_payload,
-                "ml_state":      getattr(self, "latest_ml_state", None),
+                "ml_state":      ml_state,
 
                 "artifact": {
                     "artifact_id":    artifact_id,
@@ -1268,7 +1366,21 @@ class ActivityMonitor:
                         "low_blink_rate":     low_blink_rate,
                         "expression":         expression,
                         "perclos":            round(perclos_f, 3),
+                        "ear_mean":           camera.get("ear_mean"),
                         "cam_status":         camera.get("status", "unavailable"),
+                    },
+                    "onnx_inference": {
+                        "enabled": bool(self.inference_engine),
+                        "ready": ml_state is not None,
+                        "interval_seconds": ML_INFERENCE_INTERVAL_SECONDS,
+                        "app_switches_window": app_switches_window,
+                        "dwell_seconds_window": round(dwell_seconds_window, 1),
+                        "last_result_age_seconds": (
+                            round(now_ts - self.last_ml_result_time, 1)
+                            if self.last_ml_result_time
+                            else None
+                        ),
+                        "features": ml_features,
                     },
                     "cognitive_twin": {
                         "baseline_ready":             classification.baseline_ready,
@@ -1513,6 +1625,9 @@ def _cursor_entropy(cursor):
     return round(clamp((1.0 - linearity) * 0.70 + click_density + scroll_density), 3)
 
 def _scroll_reversal_proxy(cursor):
+    explicit = cursor.get("scroll_reversals")
+    if isinstance(explicit, (int, float)):
+        return int(explicit)
     count     = int(cursor.get("scroll_count",    0))
     linearity = float(cursor.get("path_linearity",0.0))
     if count < 2: return 0
@@ -1561,18 +1676,26 @@ def _compute_idle_ratio(now, activity_timestamps, window_seconds):
         idle_time += tail
     return round(clamp(idle_time / window_seconds), 3)
 
-def _state_label(*, attention_residue, focus_depth, confusion_risk, fatigue_risk, classifier_state, perclos):
-    if classifier_state == "calibrating":
+def _state_label(*, attention_residue, focus_depth, confusion_risk, fatigue_risk, classifier_state, perclos, ml_state=None):
+    ml_cognitive = ""
+    ml_struggle = ""
+    ml_friction = 0.0
+    if isinstance(ml_state, dict):
+        ml_cognitive = str(ml_state.get("cognitive_state", "")).lower()
+        ml_struggle = str(ml_state.get("struggle_type", "")).lower()
+        ml_friction = clamp(float(ml_state.get("confusion_friction", 0.0)))
+
+    if classifier_state == "calibrating" and not ml_cognitive:
         return "calibrating"
-    if perclos >= 0.18 or classifier_state == "fatigued" or fatigue_risk >= 0.68:
+    if perclos >= 0.18 or classifier_state == "fatigued" or ml_cognitive == "fatigued" or fatigue_risk >= 0.68:
         return "fatigued"
-    if classifier_state == "confused":
-        if confusion_risk >= 0.62:
+    if classifier_state == "confused" or ml_cognitive == "confused":
+        if ml_struggle == "harmful" or ml_friction >= 0.62 or confusion_risk >= 0.62:
             return "harmful_confusion"
-        if confusion_risk >= 0.42:
+        if ml_struggle == "productive" or confusion_risk >= 0.42:
             return "productive_struggle"
         return "confused"
-    if classifier_state == "focused":
+    if classifier_state == "focused" or ml_cognitive == "focused":
         if focus_depth >= 0.72 and attention_residue <= 0.32 and fatigue_risk <= 0.40:
             return "deep_focus"
         if focus_depth >= 0.55:
@@ -1602,6 +1725,7 @@ def _camera_disabled_snapshot():
         "perclos": None, "status": "disabled",
         "message": "Camera monitor disabled by configuration.",
         "face_detected": False, "eye_aspect_ratio": None,
+        "ear_mean": None,
         "closed_threshold": None, "sample_count": 0,
         "blink_rate_per_min": 0.0, "blink_rate_class": "no_data",
         "low_blink_rate": False, "expression": "neutral",

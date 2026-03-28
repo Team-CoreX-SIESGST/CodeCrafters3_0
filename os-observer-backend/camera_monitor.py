@@ -69,6 +69,7 @@ class CameraMonitor:
 
         self._lock = threading.Lock()
         self._samples: Deque[tuple[float, float]] = deque()
+        self._ear_samples: Deque[tuple[float, float]] = deque()
         self._baseline_ears: Deque[float] = deque(maxlen=120)
 
         self._blink_state = "open"
@@ -108,7 +109,9 @@ class CameraMonitor:
             self._prune_all(now)
 
             closed_vals = [v for _, v in self._samples]
+            ear_vals = [v for _, v in self._ear_samples]
             perclos = sum(closed_vals) / len(closed_vals) if closed_vals else None
+            ear_mean = sum(ear_vals) / len(ear_vals) if ear_vals else None
 
             blink_window = [t for t in self._blink_events if t >= now - BLINK_ROLLING_WINDOW_S]
             elapsed_min = min(BLINK_ROLLING_WINDOW_S, now - (blink_window[0] if blink_window else now)) / 60.0
@@ -117,6 +120,7 @@ class CameraMonitor:
 
             return {
                 "perclos": round(perclos, 3) if perclos is not None else None,
+                "ear_mean": round(ear_mean, 3) if ear_mean is not None else None,
                 "status": self._status,
                 "message": self._message,
                 "face_detected": self._face_detected,
@@ -257,6 +261,7 @@ class CameraMonitor:
     def _record_sample(self, now: float, closed: float, *, ear: float, threshold: float) -> None:
         with self._lock:
             self._samples.append((now, closed))
+            self._ear_samples.append((now, ear))
             self._face_detected = True
             self._closed_threshold = threshold
             self._prune_all(now)
@@ -271,6 +276,8 @@ class CameraMonitor:
         cutoff = now - self.window_seconds
         while self._samples and self._samples[0][0] < cutoff:
             self._samples.popleft()
+        while self._ear_samples and self._ear_samples[0][0] < cutoff:
+            self._ear_samples.popleft()
         blink_cutoff = now - BLINK_ROLLING_WINDOW_S
         while self._blink_events and self._blink_events[0] < blink_cutoff:
             self._blink_events.popleft()
