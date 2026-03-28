@@ -4,6 +4,15 @@ import { Pinecone } from "@pinecone-database/pinecone";
 let _client = null;
 let _index = null;
 
+function isUsableHost(host) {
+  return Boolean(
+    host &&
+      typeof host === "string" &&
+      host.trim() &&
+      !host.includes("your-index-host"),
+  );
+}
+
 function getPineconeClient() {
   if (!_client) {
     const apiKey = process.env.PINECONE_API_KEY;
@@ -22,12 +31,9 @@ export function getPineconeIndex() {
     const client = getPineconeClient();
     const indexName = process.env.PINECONE_INDEX_NAME || "luna-knowledge";
     const host = process.env.PINECONE_INDEX_HOST;
-    if (host) {
-      // Use the direct host URL for lowest latency
-      _index = client.index(indexName, host);
-    } else {
-      _index = client.index(indexName);
-    }
+    _index = isUsableHost(host)
+      ? client.index({ name: indexName, host })
+      : client.index({ name: indexName });
   }
   return _index;
 }
@@ -40,7 +46,13 @@ export function getPineconeIndex() {
 export async function upsertVectors(vectors, namespace) {
   const index = getPineconeIndex();
   const ns = namespace || process.env.PINECONE_NAMESPACE || "default";
-  await index.namespace(ns).upsert(vectors);
+  await index.namespace(ns).upsert({ records: vectors });
+}
+
+export async function upsertRecords(records, namespace) {
+  const index = getPineconeIndex();
+  const ns = namespace || process.env.PINECONE_NAMESPACE || "default";
+  await index.namespace(ns).upsertRecords({ records });
 }
 
 /**
@@ -67,4 +79,29 @@ export async function queryPinecone(embedding, topK = 5, filter = undefined, nam
     score: m.score,
     metadata: m.metadata || {},
   }));
+}
+
+export async function searchPineconeByText(queryText, topK = 5, filter = undefined, namespace) {
+  const index = getPineconeIndex();
+  const ns = namespace || process.env.PINECONE_NAMESPACE || "default";
+  const response = await index.namespace(ns).searchRecords({
+    query: {
+      inputs: { text: String(queryText).trim() },
+      topK,
+      ...(filter ? { filter } : {}),
+    },
+    fields: ["text", "source"],
+  });
+
+  return (response?.result?.hits || []).map((hit) => {
+    const fields = hit?.fields && typeof hit.fields === "object" ? hit.fields : {};
+    return {
+      id: hit?._id,
+      score: hit?._score,
+      metadata: {
+        ...fields,
+        content: typeof fields.text === "string" ? fields.text : "",
+      },
+    };
+  });
 }

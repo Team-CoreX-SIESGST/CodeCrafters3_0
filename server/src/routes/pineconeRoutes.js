@@ -7,6 +7,8 @@ import {
   getConversations,
   getConversationById,
   deleteConversation,
+  getPineconeKnowledgeStats,
+  seedCognitiveKnowledge,
 } from "../controllers/pineconeController.js";
 
 const router = express.Router();
@@ -18,6 +20,12 @@ router.post("/chat", protect, handlePineconeChat);
 // ── Document ingestion ───────────────────────────────────────────────────────
 // POST /api/pinecone/upsert
 router.post("/upsert", protect, handleUpsertDocuments);
+
+// GET /api/pinecone/stats
+router.get("/stats", protect, getPineconeKnowledgeStats);
+
+// POST /api/pinecone/seed
+router.post("/seed", protect, seedCognitiveKnowledge);
 
 // ── Conversation history (MongoDB) ───────────────────────────────────────────
 // GET  /api/pinecone/conversations

@@ -8,7 +8,8 @@
     "start": "node src/index.js",
     "dev": "nodemon src/index.js",
     "seed:abha": "node src/scripts/seed_abha_data.js",
-    "seed:roles": "node src/scripts/seed_role_accounts.js"
+    "seed:roles": "node src/scripts/seed_role_accounts.js",
+    "seed:pinecone": "node src/scripts/seed_pinecone_cognitive.js"
   },
   "dependencies": {
     "@pinecone-database/pinecone": "^7.1.0",

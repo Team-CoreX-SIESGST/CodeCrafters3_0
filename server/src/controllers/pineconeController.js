@@ -2,11 +2,17 @@
 // Pinecone RAG chatbot controller — uses Groq embeddings + Pinecone search + Groq LLM
 
 import "../config/env.js";
-import { embedText, embedBatch } from "../helpers/groqEmbeddings.js";
-import { upsertVectors, queryPinecone } from "../helpers/pineconeClient.js";
+import { upsertRecords, searchPineconeByText } from "../helpers/pineconeClient.js";
 import ChatConversation from "../models/ChatConversation.js";
+import {
+  getCognitiveKnowledgeStats,
+  searchCognitiveKnowledgeInMongo,
+  streamCognitiveKnowledgeRecords,
+} from "../services/cognitiveKnowledgeService.js";
 import { Groq } from "groq-sdk";
 import crypto from "crypto";
+
+const PINECONE_RECORD_BATCH_SIZE = 90;
 
 function getGroqClient() {
   const apiKey = process.env.GROQ_API_KEY || process.env.GROQ_KEY;
@@ -47,6 +53,26 @@ Instructions:
 - If the user's question is unrelated to the context, answer using general knowledge and note that.`;
 }
 
+async function describePineconeIndex() {
+  const { getPineconeIndex } = await import("../helpers/pineconeClient.js");
+  const stats = await getPineconeIndex().describeIndexStats();
+  return {
+    namespaces: stats.namespaces || {},
+    dimension: stats.dimension || null,
+    totalRecordCount: stats.totalRecordCount || 0,
+    indexFullness: stats.indexFullness || 0,
+  };
+}
+
+function normalizeSourcePreview(chunk) {
+  return {
+    id: chunk.id,
+    score: chunk.score,
+    text: (chunk.metadata?.text || chunk.metadata?.content || "").slice(0, 300).trim(),
+    source: chunk.metadata?.source || "",
+  };
+}
+
 // ─── POST /api/pinecone/chat  (streaming SSE) ─────────────────────────────────
 export async function handlePineconeChat(req, res) {
   const { query, conversationId, namespace } = req.body || {};
@@ -72,38 +98,33 @@ export async function handlePineconeChat(req, res) {
   };
 
   try {
-    // 1. Embed the query
     send("status", { message: "Searching knowledge base…" });
-    let embedding;
+    let pineconeStats = null;
     try {
-      embedding = await embedText(query.trim());
-    } catch (embErr) {
-      send("error", { error: `Embedding failed: ${embErr.message}` });
-      return res.end();
+      pineconeStats = await describePineconeIndex();
+      console.log("[pineconeChat] Pinecone stats:", pineconeStats);
+    } catch (statsErr) {
+      console.warn("[pineconeChat] Unable to fetch Pinecone stats:", statsErr.message);
     }
 
-    // 2. Query Pinecone
     let retrievedChunks = [];
     try {
-      retrievedChunks = await queryPinecone(embedding, 5, undefined, ns);
+      retrievedChunks = await searchPineconeByText(query.trim(), 5, undefined, ns);
     } catch (pcErr) {
       // Non-fatal — continue without context
       console.warn("[pinecone] Query failed:", pcErr.message);
       send("status", { message: "Knowledge base unavailable, answering from general knowledge…" });
     }
 
+    if (retrievedChunks.length === 0) {
+      send("status", { message: "No Pinecone matches found. Checking cognitive database…" });
+      retrievedChunks = await searchCognitiveKnowledgeInMongo(query.trim(), { limit: 5 });
+    }
+
     // Send source metadata to client
     if (retrievedChunks.length > 0) {
       send("sources", {
-        sources: retrievedChunks.map((c) => ({
-          id: c.id,
-          score: c.score,
-          text:
-            (c.metadata?.text || c.metadata?.content || "")
-              .slice(0, 300)
-              .trim(),
-          source: c.metadata?.source || "",
-        })),
+        sources: retrievedChunks.map(normalizeSourcePreview),
       });
     }
 
@@ -209,31 +230,73 @@ export async function handleUpsertDocuments(req, res) {
     }
 
     const ns = namespace || process.env.PINECONE_NAMESPACE || "default";
-
-    // Embed all texts in one batch
     const texts = documents.map((d) => String(d.text || "").trim());
-    const embeddings = await embedBatch(texts);
-
-    const vectors = documents.map((doc, i) => ({
+    const records = texts
+      .map((text, i) => ({ text, doc: documents[i] }))
+      .filter((item) => item.text.length > 0)
+      .map(({ text, doc }) => ({
       id: doc.id || crypto.randomUUID(),
-      values: embeddings[i],
-      metadata: {
-        text: texts[i].slice(0, 1000), // Pinecone metadata limit
-        source: doc.source || "manual",
-        ...(doc.metadata || {}),
-      },
+      text: text.slice(0, 40000),
+      source: doc.source || "manual",
+      ...(doc.metadata || {}),
     }));
 
-    await upsertVectors(vectors, ns);
+    if (records.length === 0) {
+      return res.status(400).json({ error: "No non-empty document text was provided" });
+    }
+
+    await upsertRecords(records, ns);
 
     res.json({
       success: true,
-      upserted: vectors.length,
+      upserted: records.length,
       namespace: ns,
-      ids: vectors.map((v) => v.id),
+      ids: records.map((record) => record.id),
     });
   } catch (err) {
     console.error("[upsertDocuments] Error:", err);
+    res.status(500).json({ error: err.message });
+  }
+}
+
+export async function getPineconeKnowledgeStats(req, res) {
+  try {
+    const [mongoKnowledge, pinecone] = await Promise.all([
+      getCognitiveKnowledgeStats(),
+      describePineconeIndex(),
+    ]);
+    res.json({
+      success: true,
+      mongoKnowledge,
+      pinecone,
+      namespace: process.env.PINECONE_NAMESPACE || "default",
+    });
+  } catch (err) {
+    console.error("[getPineconeKnowledgeStats] Error:", err);
+    res.status(500).json({ error: err.message });
+  }
+}
+
+export async function seedCognitiveKnowledge(req, res) {
+  try {
+    const namespace = req.body?.namespace || process.env.PINECONE_NAMESPACE || "default";
+    let upserted = 0;
+    let batches = 0;
+
+    for await (const batch of streamCognitiveKnowledgeRecords(PINECONE_RECORD_BATCH_SIZE)) {
+      await upsertRecords(batch, namespace);
+      upserted += batch.length;
+      batches += 1;
+    }
+
+    res.json({
+      success: true,
+      namespace,
+      upserted,
+      batches,
+    });
+  } catch (err) {
+    console.error("[seedCognitiveKnowledge] Error:", err);
     res.status(500).json({ error: err.message });
   }
 }
