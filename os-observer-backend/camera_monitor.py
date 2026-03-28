@@ -180,8 +180,15 @@ class CameraMonitor:
                     continue
 
                 self._frames_processed += 1
+                
+                # --- NEW: Display the live video feed ---
+                cv2.imshow("Flow Guardian - Live Camera Feed", frame)
+                if cv2.waitKey(1) & 0xFF == ord('q'):
+                    self._stop_event.set()
+                    break
+                # ----------------------------------------
+                
                 if now - last_sample_at < self.sample_interval_seconds:
-                    time.sleep(0.02)
                     continue
 
                 rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
@@ -218,6 +225,10 @@ class CameraMonitor:
         finally:
             face_mesh.close()
             cap.release()
+            try:
+                cv2.destroyAllWindows()
+            except Exception:
+                pass
 
     def _update_blink_state(self, ear: float, threshold: float, now: float) -> None:
         closing = ear < threshold
