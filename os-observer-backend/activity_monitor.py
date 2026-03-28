@@ -883,6 +883,7 @@ class ActivityMonitor:
             return
 
         if not ml_result:
+            print(f"[ONNX] Warming up — collecting context windows ({len(self.inference_engine.history)}/{self.inference_engine.seq_len})")
             return
 
         previous_state = (
@@ -893,6 +894,18 @@ class ActivityMonitor:
         self.latest_ml_state = ml_result
         self.last_ml_result_time = now_ts
         current_state = str(ml_result.get("cognitive_state", ""))
+
+        # ── Real-time ONNX output (visible in terminal) ───────────────────
+        print(
+            f"[ONNX] {time.strftime('%H:%M:%S')} "
+            f"state={current_state:<10} "
+            f"attention_residue={ml_result.get('attention_residue', 0.0):.3f}  "
+            f"pre_error_prob={ml_result.get('pre_error_prob', 0.0):.3f}  "
+            f"interruptibility={ml_result.get('interruptibility', 0.0):.3f}  "
+            f"confusion_friction={ml_result.get('confusion_friction', 0.0):.3f}  "
+            f"struggle={ml_result.get('struggle_type', 'n/a')}"
+        )
+
         if current_state and current_state != previous_state:
             self.record_event(f"ML State inferred: {current_state.capitalize()}")
 
@@ -1439,6 +1452,7 @@ class ActivityMonitor:
                             "blink_rate": blink_rate, "expression": expression},
                 "contextual": {"session_age_minutes": round(session_age, 1),
                                "time_of_day_modifier": tod_modifier},
+                "ml_state": ml_state,
             })
             self.store.insert("features_raw", {
                 "user_id": self.user_id, "created_at": now, "state_label": state_label,
@@ -1700,7 +1714,7 @@ def _state_label(*, classifier_state, keyboard, camera, idle_seconds):
     if recent_backspaces > recent_printable:
         return "confused"
 
-    if camera_available and (blink_rate > 30 or rigorous_head_movement):
+    if camera_available and face_detected and (blink_rate > 30 or rigorous_head_movement):
         return "fatigued"
 
     if classifier_state == "confused":
