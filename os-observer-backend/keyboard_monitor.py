@@ -13,6 +13,7 @@ from pynput import keyboard
 
 
 BURST_PAUSE_SECONDS = 1.0
+RECENT_CONFUSION_WINDOW_SECONDS = 5.0
 
 
 @dataclass(slots=True)
@@ -125,11 +126,17 @@ class KeyboardMonitor:
         keys_per_minute = total_keys / duration * 60.0
         backspace_count = sum(1 for sample in samples if sample.is_backspace)
         delete_count = sum(1 for sample in samples if sample.is_delete)
+        recent_cutoff = now - RECENT_CONFUSION_WINDOW_SECONDS
+        recent_samples = [sample for sample in samples if sample.timestamp >= recent_cutoff]
+        recent_backspace_count = sum(1 for sample in recent_samples if sample.is_backspace)
+        recent_printable_count = sum(1 for sample in recent_samples if sample.is_printable)
 
         return {
             "wpm": round(wpm, 1),
             "keys_per_minute": round(keys_per_minute, 1),
             "backspace_count": backspace_count,
+            "recent_backspace_count_5s": recent_backspace_count,
+            "recent_printable_count_5s": recent_printable_count,
             "delete_count": delete_count,
             "backspace_ratio": round(backspace_count / total_keys, 3) if total_keys else 0.0,
             "modifier_count": modifier_count,
@@ -153,6 +160,8 @@ class KeyboardMonitor:
             "wpm": 0.0,
             "keys_per_minute": 0.0,
             "backspace_count": 0,
+            "recent_backspace_count_5s": 0,
+            "recent_printable_count_5s": 0,
             "delete_count": 0,
             "modifier_count": 0,
             "total_keys": 0,
