@@ -3,20 +3,26 @@ from __future__ import annotations
 import tkinter as tk
 
 STATE_STYLES = {
-    "steady": {
-        "badge": "STEADY",
+    "calibrating": {
+        "badge": "CALIBRATING",
+        "bg": "#10243d",
+        "accent": "#60a5fa",
+        "text": "#eff6ff",
+    },
+    "focused": {
+        "badge": "FOCUSED",
         "bg": "#143127",
         "accent": "#4ade80",
         "text": "#f8fafc",
     },
-    "searching": {
-        "badge": "SEARCHING",
+    "confused": {
+        "badge": "CONFUSED",
         "bg": "#3a2b0a",
         "accent": "#facc15",
         "text": "#fff7ed",
     },
-    "in_a_hurry": {
-        "badge": "IN A HURRY",
+    "fatigued": {
+        "badge": "FATIGUED",
         "bg": "#3f1217",
         "accent": "#fb7185",
         "text": "#fff1f2",
@@ -170,7 +176,7 @@ class StatusOverlay:
 
         self.title = tk.Label(
             self.content,
-            text="Waiting for cursor movement...",
+            text="Waiting for baseline calibration...",
             font=("Segoe UI", 16, "bold"),
             bg="#0b1220",
             fg="#f8fafc",
@@ -181,7 +187,7 @@ class StatusOverlay:
 
         self.message = tk.Label(
             self.content,
-            text="Move the cursor to let the OS-level detector classify activity.",
+            text="The monitor is collecting keyboard, mouse, idle, and optional camera signals.",
             font=("Segoe UI", 10),
             bg="#0b1220",
             fg="#cbd5e1",
@@ -197,9 +203,9 @@ class StatusOverlay:
             text=(
                 "Active app: Unknown\n"
                 "Window: Unknown\n"
-                "Typing: 0 WPM | keys/min: 0 | backspaces: 0\n"
-                "Mouse: 0 px/s | distance: 0 px | clicks: 0 | scrolls: 0\n"
-                "Turns: 0 | idle: -"
+                "Keyboard: IKI mean 0.00s | IKI std 0.00s | error rate 0.00\n"
+                "Mouse: speed 0 px/s | linearity 0.00 | dwell 0.00s\n"
+                "Burst: 0.0 | idle ratio 0.00 | PERCLOS: unavailable"
             ),
             font=("Consolas", 9),
             bg="#0b1220",
@@ -212,7 +218,7 @@ class StatusOverlay:
 
         self.open_apps_title = tk.Label(
             self.content,
-            text="Open Applications",
+            text="Baseline + Scores",
             font=("Segoe UI", 10, "bold"),
             bg="#0b1220",
             fg="#e2e8f0",
@@ -223,7 +229,7 @@ class StatusOverlay:
 
         self.open_apps = tk.Label(
             self.content,
-            text="- Waiting for window scan...",
+            text="- Waiting for calibration stats...",
             font=("Consolas", 9),
             bg="#0b1220",
             fg="#cbd5e1",
@@ -367,11 +373,14 @@ class StatusOverlay:
         self.root.after(self.refresh_ms, self._refresh)
 
     def _render(self, snapshot: dict[str, object]) -> None:
-        cursor = snapshot["cursor"]
+        state = snapshot["state"]
+        features = snapshot["features"]
         keyboard = snapshot["keyboard"]
+        mouse = snapshot["mouse"]
+        camera = snapshot["camera"]
         system = snapshot["system"]
-        style = STATE_STYLES.get(str(cursor["state"]), STATE_STYLES["steady"])
-        confidence = int(float(cursor["confidence"]) * 100)
+        style = STATE_STYLES.get(str(state["name"]), STATE_STYLES["focused"])
+        confidence = int(float(state["confidence"]) * 100)
 
         self.root.configure(bg=style["bg"])
         self.container.configure(bg=style["bg"])
@@ -390,12 +399,12 @@ class StatusOverlay:
             fg="#081018",
         )
         self.title.configure(
-            text=self._title_for_state(str(cursor["state"])),
+            text=self._title_for_state(str(state["name"])),
             bg=style["bg"],
             fg=style["text"],
         )
         self.message.configure(
-            text=str(cursor["message"]),
+            text=str(state["message"]),
             bg=style["bg"],
             fg=style["text"],
         )
@@ -403,24 +412,26 @@ class StatusOverlay:
             text=(
                 f"Active app: {system['active_app']}\n"
                 f"Window: {self._trim_text(str(system['active_window']), 72)}\n"
-                f"Typing: {keyboard['wpm']} WPM | keys/min: {keyboard['keys_per_minute']} | "
-                f"backspaces: {keyboard['backspace_count']}\n"
-                f"Mouse: {int(cursor['features'].average_speed)} px/s | "
-                f"distance: {int(cursor['features'].total_distance)} px | "
-                f"clicks: {cursor['click_count']} | scrolls: {cursor['scroll_count']}\n"
-                f"Turns: {cursor['features'].direction_changes} | "
-                f"idle: {snapshot['idle_seconds'] if snapshot['idle_seconds'] is not None else '-'} s"
+                f"Keyboard: IKI mean {features['iki_mean']}s | IKI std {features['iki_std']}s | "
+                f"error rate {features['error_rate']}\n"
+                f"Mouse: speed {int(float(features['cursor_speed']))} px/s | "
+                f"linearity {features['path_linearity']} | dwell {features['click_dwell']}s\n"
+                f"Burst: {features['burst_length']} | idle ratio {features['idle_ratio']} | "
+                f"PERCLOS: {features['perclos'] if features['perclos'] is not None else camera['status']}\n"
+                f"Keys/min: {keyboard['keys_per_minute']} | clicks: {mouse['click_count']} | "
+                f"scrolls: {mouse['scroll_count']} | idle: "
+                f"{snapshot['idle_seconds'] if snapshot['idle_seconds'] is not None else '-'} s"
             ),
             bg=style["bg"],
             fg="#dbe4ee",
         )
         self.open_apps.configure(
-            text=self._format_open_apps(system["open_apps"]),
+            text=self._format_scores(state, snapshot["features"]),
             bg=style["bg"],
             fg="#cbd5e1",
         )
         self.events.configure(
-            text=self._format_events(snapshot["recent_events"]),
+            text=self._format_events(snapshot["recent_events"], system["open_apps"], camera),
             bg=style["bg"],
             fg="#cbd5e1",
         )
@@ -430,11 +441,13 @@ class StatusOverlay:
 
     @staticmethod
     def _title_for_state(state: str) -> str:
-        if state == "searching":
-            return "Cursor suggests the user is searching around."
-        if state == "in_a_hurry":
-            return "Cursor suggests the user is in a hurry."
-        return "Cursor movement looks steady."
+        if state == "calibrating":
+            return "Calibrating your personal baseline."
+        if state == "confused":
+            return "Interaction pattern suggests confusion or exploration."
+        if state == "fatigued":
+            return "Interaction pattern suggests fatigue."
+        return "Interaction pattern suggests focused work."
 
     @staticmethod
     def _trim_text(value: str, max_length: int) -> str:
@@ -442,18 +455,46 @@ class StatusOverlay:
             return value
         return f"{value[: max_length - 3]}..."
 
-    def _format_open_apps(self, open_apps) -> str:
-        if not open_apps:
-            return "- No visible windows detected yet."
-
-        lines = []
-        for app in list(open_apps)[:6]:
-            title = self._trim_text(str(app["title"]), 45)
-            lines.append(f"- {app['name']} | {title}")
+    @staticmethod
+    def _format_scores(state, features) -> str:
+        scores = state["scores"]
+        z_scores = state["z_scores"]
+        progress = int(float(state["calibration_progress"]) * 100)
+        lines = [
+            f"- Calibration: {progress}% | baseline samples: {state['baseline_samples']}",
+            (
+                f"- Scores -> focused {scores['focused']} | "
+                f"confused {scores['confused']} | fatigued {scores['fatigued']}"
+            ),
+            (
+                f"- Z -> iki_std {z_scores.get('iki_std', 0.0)} | "
+                f"linearity {z_scores.get('path_linearity', 0.0)} | "
+                f"idle {z_scores.get('idle_ratio', 0.0)}"
+            ),
+            (
+                f"- Window -> burst {features['burst_length']} | "
+                f"error {features['error_rate']} | perclos "
+                f"{features['perclos'] if features['perclos'] is not None else 'n/a'}"
+            ),
+        ]
         return "\n".join(lines)
 
-    @staticmethod
-    def _format_events(events) -> str:
-        if not events:
+    def _format_events(self, events, open_apps, camera) -> str:
+        lines = []
+        if camera.get("message"):
+            lines.append(f"- Camera: {camera['message']}")
+
+        if open_apps:
+            lines.append("- Open apps:")
+            for app in list(open_apps)[:5]:
+                title = self._trim_text(str(app["title"]), 42)
+                lines.append(f"  {app['name']} | {title}")
+
+        if events:
+            lines.append("- Recent events:")
+            for event in list(events)[-5:]:
+                lines.append(f"  {event}")
+
+        if not lines:
             return "- No recent events yet."
-        return "\n".join(f"- {event}" for event in list(events)[-6:])
+        return "\n".join(lines)

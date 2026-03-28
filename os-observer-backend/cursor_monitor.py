@@ -9,24 +9,25 @@ from typing import Deque
 
 from pynput import mouse
 
-from classifier import CursorFeatures, classify_cursor_activity
-
 
 @dataclass(slots=True)
 class CursorSample:
     timestamp: float
+    x: int
+    y: int
     distance: float
     speed: float
-    angle: float
 
 
 class CursorMonitor:
-    def __init__(self, window_seconds: float = 4.0, event_callback=None) -> None:
+    def __init__(self, window_seconds: float = 30.0, event_callback=None) -> None:
         self.window_seconds = window_seconds
         self.event_callback = event_callback
         self.samples: Deque[CursorSample] = deque()
         self.click_times: Deque[float] = deque()
         self.scroll_times: Deque[float] = deque()
+        self.click_dwells: Deque[tuple[float, float]] = deque()
+        self._press_times: dict[str, float] = {}
         self._lock = threading.Lock()
         self._last_position: tuple[int, int] | None = None
         self._last_timestamp: float | None = None
@@ -62,14 +63,8 @@ class CursorMonitor:
         dx = x - self._last_position[0]
         dy = y - self._last_position[1]
         distance = math.hypot(dx, dy)
-        if distance <= 0:
-            self._last_position = (x, y)
-            self._last_timestamp = now
-            return
-
-        speed = distance / dt
-        angle = math.atan2(dy, dx)
-        sample = CursorSample(timestamp=now, distance=distance, speed=speed, angle=angle)
+        speed = distance / dt if distance > 0 else 0.0
+        sample = CursorSample(timestamp=now, x=x, y=y, distance=distance, speed=speed)
 
         with self._lock:
             self.samples.append(sample)
@@ -79,17 +74,22 @@ class CursorMonitor:
         self._last_timestamp = now
 
     def _on_click(self, x: int, y: int, button, pressed: bool) -> None:
-        if not pressed:
-            return
-
         now = time.time()
         self._last_input_timestamp = now
+        button_name = getattr(button, "name", str(button))
+
         with self._lock:
-            self.click_times.append(now)
+            if pressed:
+                self.click_times.append(now)
+                self._press_times[button_name] = now
+            else:
+                pressed_at = self._press_times.pop(button_name, None)
+                if pressed_at is not None:
+                    self.click_dwells.append((now, max(now - pressed_at, 0.0)))
             self._prune(now)
 
-        if self.event_callback is not None:
-            self.event_callback(f"Mouse click: {button.name}")
+        if pressed and self.event_callback is not None:
+            self.event_callback(f"Mouse click: {button_name}")
 
     def _on_scroll(self, x: int, y: int, dx: int, dy: int) -> None:
         now = time.time()
@@ -111,59 +111,47 @@ class CursorMonitor:
             self.click_times.popleft()
         while self.scroll_times and self.scroll_times[0] < cutoff:
             self.scroll_times.popleft()
+        while self.click_dwells and self.click_dwells[0][0] < cutoff:
+            self.click_dwells.popleft()
 
     def snapshot(self) -> dict[str, object]:
         with self._lock:
             now = time.time()
             self._prune(now)
             samples = list(self.samples)
-            click_count = len(self.click_times)
-            scroll_count = len(self.scroll_times)
+            click_times = list(self.click_times)
+            scroll_times = list(self.scroll_times)
+            click_dwell_values = [value for _, value in self.click_dwells]
 
-        features = self._compute_features(samples)
-        state, confidence, message = classify_cursor_activity(features)
+        duration_seconds = self.window_seconds
+        if samples:
+            duration_seconds = max(samples[-1].timestamp - samples[0].timestamp, 0.1)
+
+        total_distance = sum(sample.distance for sample in samples)
+        cursor_speed = total_distance / duration_seconds if duration_seconds else 0.0
+        straight_line_distance = 0.0
+        if samples:
+            straight_line_distance = math.hypot(
+                samples[-1].x - samples[0].x,
+                samples[-1].y - samples[0].y,
+            )
+        path_linearity = (
+            straight_line_distance / total_distance if total_distance > 0 else 0.0
+        )
+        click_dwell = (
+            sum(click_dwell_values) / len(click_dwell_values) if click_dwell_values else 0.0
+        )
+
         return {
-            "state": state,
-            "confidence": confidence,
-            "message": message,
-            "features": features,
-            "click_count": click_count,
-            "scroll_count": scroll_count,
+            "cursor_speed": round(cursor_speed, 2),
+            "path_linearity": round(min(max(path_linearity, 0.0), 1.0), 3),
+            "click_dwell": round(click_dwell, 3),
+            "total_distance": round(total_distance, 2),
+            "straight_line_distance": round(straight_line_distance, 2),
+            "click_count": len(click_times),
+            "scroll_count": len(scroll_times),
             "seconds_since_last_input": round(
                 now - self._last_input_timestamp, 1
             ) if self._last_input_timestamp else None,
+            "activity_timestamps": [sample.timestamp for sample in samples] + click_times + scroll_times,
         }
-
-    def _compute_features(self, samples: list[CursorSample]) -> CursorFeatures:
-        if not samples:
-            return CursorFeatures(
-                duration_seconds=self.window_seconds,
-                total_distance=0.0,
-                average_speed=0.0,
-                peak_speed=0.0,
-                direction_changes=0,
-                event_count=0,
-            )
-
-        total_distance = sum(sample.distance for sample in samples)
-        peak_speed = max(sample.speed for sample in samples)
-        duration_seconds = max(samples[-1].timestamp - samples[0].timestamp, 0.1)
-        average_speed = total_distance / duration_seconds
-
-        direction_changes = 0
-        previous_angle = samples[0].angle
-        for sample in samples[1:]:
-            delta = abs(sample.angle - previous_angle)
-            delta = min(delta, (2 * math.pi) - delta)
-            if delta > math.radians(55):
-                direction_changes += 1
-            previous_angle = sample.angle
-
-        return CursorFeatures(
-            duration_seconds=duration_seconds,
-            total_distance=round(total_distance, 2),
-            average_speed=round(average_speed, 2),
-            peak_speed=round(peak_speed, 2),
-            direction_changes=direction_changes,
-            event_count=len(samples),
-        )
