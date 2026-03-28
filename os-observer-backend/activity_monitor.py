@@ -69,7 +69,7 @@ settings = Settings(
     camera_enabled            = env_flag("COGNITIVE_CAMERA_ENABLED",    True),
     camera_window_seconds     = float(os.getenv("COGNITIVE_CAMERA_WINDOW_SECONDS",    "60")),
     handoff_idle_seconds      = int(os.getenv("COGNITIVE_HANDOFF_IDLE_SECONDS",      "300")),
-    snapshot_interval_seconds = float(os.getenv("COGNITIVE_SNAPSHOT_INTERVAL_SECONDS", "3")),
+    snapshot_interval_seconds = float(os.getenv("COGNITIVE_SNAPSHOT_INTERVAL_SECONDS", "0.35")),
 )
 
 USER_ID   = os.getenv("COGNITIVE_USER_ID", getpass.getuser())
@@ -964,7 +964,7 @@ def _state_label(*, focus_depth, confusion_risk, fatigue_risk, classifier_state,
         return "harmful_confusion"
     if confusion_risk >= 0.42:
         return "productive_struggle"
-    return "steady"
+    return "focused"
 
 def _current_goal(active_app, active_window):
     app = active_app.lower()

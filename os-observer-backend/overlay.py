@@ -54,9 +54,9 @@ STATE_STYLES: dict[str, dict[str, str]] = {
         "bar":   "#7f1d1d", "text":   "#fff1f2", "sub":    "#fca5a5",
     },
     "steady": {
-        "badge": "STEADY",
-        "bg":    "#0d1a2d", "accent": "#38bdf8",
-        "bar":   "#0c4a6e", "text":   "#f0f9ff", "sub":    "#7dd3fc",
+        "badge": "FOCUSED",
+        "bg":    "#0d2118", "accent": "#4ade80",
+        "bar":   "#14532d", "text":   "#f0fdf4", "sub":    "#86efac",
     },
 }
 
@@ -79,7 +79,7 @@ APP_BAR = 140
 
 
 class StatusOverlay:
-    def __init__(self, payload_provider, refresh_ms: int = 700) -> None:
+    def __init__(self, payload_provider, refresh_ms: int = 200) -> None:
         self.payload_provider = payload_provider
         self.refresh_ms       = refresh_ms
 
@@ -228,6 +228,7 @@ class StatusOverlay:
             self._app_bar_rows.append((name_lbl, bar_cvs, time_lbl))
             self._bind_drag(row)
 
+        # ── SECTION: Behavior Network ────────────────────────────────────
         # ── SECTION: Live Scores ─────────────────────────────────────────
         self._mk_section("📊  Live Scores")
         self.score_frame = tk.Frame(self.content, bg="#0b1220")
@@ -472,6 +473,7 @@ class StatusOverlay:
                 name_lbl.configure(text="", fg="#374151")
                 time_lbl.configure(text="", fg="#374151")
 
+
         # ── Score bars with trend arrows ──────────────────────────────────
         for key, _label, _hint in SCORE_BARS:
             val     = float(scores.get(key, 0.0))
@@ -623,6 +625,17 @@ class StatusOverlay:
         evt_text = "\n".join(f"  {e}" for e in events[-8:]) if events else "— No events yet."
         self.lbl_events.configure(text=evt_text, fg=style["sub"], bg=bg)
 
+    @staticmethod
+    def _graph_node_color(kind: str, style: dict[str, str]) -> str:
+        palette = {
+            "user": "#93c5fd",
+            "app": "#fbbf24",
+            "state": style["accent"],
+            "artifact": "#c084fc",
+            "signal": "#f87171",
+        }
+        return palette.get(kind, style["accent"])
+
     # ── Helper: section header ────────────────────────────────────────────────
     def _mk_section(self, title: str) -> tk.Label:
         lbl = tk.Label(
@@ -702,7 +715,7 @@ def _state_title(state: str) -> str:
         "productive_struggle": "Interaction pattern: productive struggle — learning in progress.",
         "harmful_confusion":   "Interaction pattern: harmful confusion — break suggested.",
         "fatigued":            "Interaction pattern: fatigue detected — rest recommended.",
-        "steady":              "Interaction pattern: steady — normal cognitive load.",
+        "steady":              "Interaction pattern: focused work.",
     }.get(state, "Observing…")
 
 

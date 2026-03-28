@@ -22,7 +22,7 @@ def main() -> None:
     )
     api_thread.start()
 
-    overlay = StatusOverlay(payload_provider=monitor.snapshot, refresh_ms=700)
+    overlay = StatusOverlay(payload_provider=monitor.snapshot, refresh_ms=200)
     try:
         overlay.run()
     finally:
