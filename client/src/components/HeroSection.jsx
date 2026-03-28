@@ -43,11 +43,11 @@ const CognitiveField = () => {
       z: y * Math.sin(a) + z * Math.cos(a),
     });
     const prj = (x, y, z) => {
-      const R = Math.min(W, H) * 0.48;
+      const R = Math.min(W, H) * 0.62;
       const s = 440 / (440 + z + R * 0.55);
       return { sx: W / 2 + x * s, sy: H / 2 + y * s + 12, scale: s, z };
     };
-    const R = () => Math.min(W, H) * 0.48;
+    const R = () => Math.min(W, H) * 0.62;
 
     /* ── build cognitive field scene ──────────────────────────── */
     const buildScene = () => {
@@ -60,13 +60,13 @@ const CognitiveField = () => {
         oy: 0,
         oz: r * 0.25,
         id: "CORE",
-        label: "Inference Core",
+        label: "Inference Engine",
         state: "core",
         intensity: 100,
         anchor: true,
-        r: 12,
+        r: 18,
         ph: 0,
-        stationary: true, // Core doesn't move
+        stationary: true,
         orbitRadius: 0,
         orbitAngle: 0,
         orbitSpeed: 0,
@@ -76,29 +76,29 @@ const CognitiveField = () => {
       // Orbital speed inversely proportional to radius (inner = faster, like real physics)
       const stateAnchors = [
         { 
-          orbitRadius: 0.85, startAngle: 0, 
-          id: "FOCUS", state: "focus", intensity: 92,
-          orbitSpeed: 0.00045, // outer ring, slower
+          orbitRadius: 0.82, startAngle: 0, 
+          id: "FOCUS", label: "Focus State", state: "focus", intensity: 92,
+          orbitSpeed: 0.00045,
         },
         { 
-          orbitRadius: 0.72, startAngle: Math.PI * 0.4, 
-          id: "CONF", state: "confusion", intensity: 87,
-          orbitSpeed: 0.00065, // middle ring, medium speed
+          orbitRadius: 0.68, startAngle: Math.PI * 0.42, 
+          id: "CONFUSION", label: "Confusion", state: "confusion", intensity: 87,
+          orbitSpeed: 0.00065,
         },
         { 
-          orbitRadius: 0.88, startAngle: Math.PI * 1.2, 
-          id: "FTIG", state: "fatigue", intensity: 71,
-          orbitSpeed: 0.00040, // outermost ring, slowest
+          orbitRadius: 0.88, startAngle: Math.PI * 1.18, 
+          id: "FATIGUE", label: "Fatigue State", state: "fatigue", intensity: 71,
+          orbitSpeed: 0.00040,
         },
         { 
-          orbitRadius: 0.72, startAngle: Math.PI * 1.7, 
-          id: "RESID", state: "residue", intensity: 64,
-          orbitSpeed: 0.00065, // middle ring, medium speed
+          orbitRadius: 0.68, startAngle: Math.PI * 1.68, 
+          id: "RESIDUE", label: "Attention Residue", state: "residue", intensity: 64,
+          orbitSpeed: 0.00065,
         },
         { 
-          orbitRadius: 0.85, startAngle: Math.PI, 
-          id: "RECOV", state: "recovery", intensity: 78,
-          orbitSpeed: 0.00045, // outer ring, slower
+          orbitRadius: 0.82, startAngle: Math.PI, 
+          id: "RECOVERY", label: "Recovery", state: "recovery", intensity: 78,
+          orbitSpeed: 0.00045,
         },
       ];
 
@@ -106,11 +106,10 @@ const CognitiveField = () => {
         nds.push({
           ...s,
           anchor: true,
-          r: 10,
+          r: 14,
           ph: Math.random() * 6.28,
           stationary: false,
           orbitAngle: s.startAngle,
-          // Position will be calculated dynamically each frame
           ox: 0,
           oy: 0,
           oz: r * 0.25,
@@ -118,12 +117,10 @@ const CognitiveField = () => {
       });
 
       // Signal trace particles on inner orbits - faster orbital speeds
-      for (let i = 0; i < 28; i++) {
+      for (let i = 0; i < 32; i++) {
         const ringIdx = i % 4;
-        const orbitRadius = 0.25 + ringIdx * 0.12; // 4 inner orbital rings
-        const startAngle = (i / 7) * Math.PI * 2 + (ringIdx * 0.4);
-        
-        // Inner rings orbit MUCH faster (inverse square for dramatic effect)
+        const orbitRadius = 0.22 + ringIdx * 0.11;
+        const startAngle = (i / 8) * Math.PI * 2 + (ringIdx * 0.4);
         const orbitSpeed = 0.0015 / (orbitRadius * orbitRadius);
         
         nds.push({
@@ -131,7 +128,7 @@ const CognitiveField = () => {
           orbitAngle: startAngle,
           orbitSpeed,
           anchor: false,
-          r: 2.2,
+          r: 2.8,
           ph: Math.random() * 6.28,
           id: null,
           stationary: false,
@@ -231,16 +228,115 @@ const CognitiveField = () => {
         for (let i = 1; i < n.trail.length; i++) {
           const prev = n.trail[i - 1];
           const curr = n.trail[i];
-          const alpha = (i / n.trail.length) * (n.anchor ? 0.25 : 0.15);
+          const alpha = (i / n.trail.length) * (n.anchor ? 0.28 : 0.15);
           
           ctx.beginPath();
           ctx.moveTo(prev.sx, prev.sy);
           ctx.lineTo(curr.sx, curr.sy);
           ctx.strokeStyle = `rgba(${trailColor},${alpha})`;
-          ctx.lineWidth = n.anchor ? 1.2 : 0.6;
+          ctx.lineWidth = n.anchor ? 1.4 : 0.6;
           ctx.stroke();
         }
       });
+    };
+
+    /* ── draw external state labels ───────────────────────────── */
+    const drawExternalLabels = (pr) => {
+      pr.forEach((n) => {
+        if (!n.anchor || !n.label) return;
+        
+        let stateColor = "0,232,122";
+        if (n.state === "core") {
+          stateColor = "0,232,122";
+        } else if (n.state === "confusion") {
+          stateColor = "239,68,68";
+        } else if (n.state === "fatigue") {
+          stateColor = "245,158,11";
+        } else if (n.state === "residue") {
+          stateColor = "234,179,8";
+        } else if (n.state === "recovery") {
+          stateColor = "34,197,94";
+        }
+        
+        if (n.state === "core") {
+          // Core label below
+          ctx.font = "700 11px 'IBM Plex Mono', monospace";
+          ctx.textAlign = "center";
+          ctx.fillStyle = `rgba(${stateColor}, 0.85)`;
+          ctx.fillText(n.label.toUpperCase(), n.sx, n.sy + 42);
+          return;
+        }
+        
+        // Calculate label position outside the node
+        const angle = Math.atan2(n.sy - H / 2, n.sx - W / 2);
+        const labelDist = 48;
+        const lx = n.sx + Math.cos(angle) * labelDist;
+        const ly = n.sy + Math.sin(angle) * labelDist;
+        
+        // Draw connection line from node to label
+        ctx.beginPath();
+        ctx.moveTo(n.sx, n.sy);
+        ctx.lineTo(lx, ly);
+        ctx.strokeStyle = `rgba(${stateColor}, 0.3)`;
+        ctx.lineWidth = 1;
+        ctx.stroke();
+        
+        // Draw label background
+        ctx.font = "600 10px 'IBM Plex Mono', monospace";
+        const textWidth = ctx.measureText(n.label).width;
+        const padding = 6;
+        ctx.fillStyle = `rgba(${stateColor}, 0.12)`;
+        ctx.fillRect(lx - textWidth / 2 - padding, ly - 8, textWidth + padding * 2, 16);
+        
+        // Draw label text
+        ctx.textAlign = "center";
+        ctx.fillStyle = `rgba(${stateColor}, 0.95)`;
+        ctx.fillText(n.label, lx, ly + 3);
+        
+        // Draw intensity below label
+        if (n.intensity) {
+          ctx.font = "500 8px 'IBM Plex Mono', monospace";
+          ctx.fillStyle = `rgba(${stateColor}, 0.6)`;
+          ctx.fillText(`${n.intensity}%`, lx, ly + 14);
+        }
+      });
+    };
+
+    /* ── draw core energy beams ──────────────────────────────── */
+    const drawCoreBeams = (pr) => {
+      const core = pr[0];
+      if (!core) return;
+      
+      // Draw radial energy beams to state nodes
+      for (let i = 1; i <= 5; i++) {
+        const state = pr[i];
+        if (!state) continue;
+        
+        const pulse = Math.sin(frame * 0.02 + i * 0.8) * 0.5 + 0.5;
+        
+        // Main beam
+        ctx.beginPath();
+        ctx.moveTo(core.sx, core.sy);
+        ctx.lineTo(state.sx, state.sy);
+        
+        const gradient = ctx.createLinearGradient(core.sx, core.sy, state.sx, state.sy);
+        gradient.addColorStop(0, `rgba(0,232,122,${0.35 + pulse * 0.15})`);
+        gradient.addColorStop(1, `rgba(0,232,122,0.08)`);
+        
+        ctx.strokeStyle = gradient;
+        ctx.lineWidth = 2 + pulse * 0.8;
+        ctx.stroke();
+        
+        // Animated energy particles along beam
+        const particlePos = (frame * 0.003 + i * 0.2) % 1;
+        const px = core.sx + (state.sx - core.sx) * particlePos;
+        const py = core.sy + (state.sy - core.sy) * particlePos;
+        
+        ctx.beginPath();
+        ctx.arc(px, py, 3, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(0,232,122,${0.8 - particlePos * 0.5})`;
+        ctx.fill();
+      }
     };
 
     /* ── draw inference lattice (curved paths) ────────────────── */
@@ -267,18 +363,37 @@ const CognitiveField = () => {
         }
 
         if (p.type === "core") {
-          ctx.strokeStyle = "rgba(0,232,122,0.25)";
-          ctx.lineWidth = 1.5;
+          // Skip core connections - handled by energy beams
+          return;
         } else if (p.type === "transition") {
-          ctx.strokeStyle = "rgba(0,232,122,0.4)";
-          ctx.lineWidth = 1.8;
+          ctx.strokeStyle = "rgba(0,232,122,0.5)";
+          ctx.lineWidth = 2.2;
+          ctx.stroke();
+          
+          // Draw directional arrow
+          const t = 0.65;
+          const it = 1 - t;
+          const arrowX = it * it * a.sx + 2 * it * t * cpx + t * t * b.sx;
+          const arrowY = it * it * a.sy + 2 * it * t * cpy + t * t * b.sy;
+          
+          const angle = Math.atan2(b.sy - a.sy, b.sx - a.sx);
+          const arrowSize = 6;
+          
+          ctx.beginPath();
+          ctx.moveTo(arrowX, arrowY);
+          ctx.lineTo(arrowX - arrowSize * Math.cos(angle - 0.4), arrowY - arrowSize * Math.sin(angle - 0.4));
+          ctx.lineTo(arrowX - arrowSize * Math.cos(angle + 0.4), arrowY - arrowSize * Math.sin(angle + 0.4));
+          ctx.closePath();
+          ctx.fillStyle = "rgba(0,232,122,0.7)";
+          ctx.fill();
+          
         } else if (p.type === "drift") {
-          ctx.setLineDash([5, 4]);
-          ctx.strokeStyle = "rgba(245,158,11,0.35)";
-          ctx.lineWidth = 1.4;
+          ctx.setLineDash([6, 5]);
+          ctx.strokeStyle = "rgba(245,158,11,0.45)";
+          ctx.lineWidth = 1.8;
+          ctx.stroke();
+          ctx.setLineDash([]);
         }
-        ctx.stroke();
-        ctx.setLineDash([]);
       });
     };
 
@@ -447,7 +562,10 @@ const CognitiveField = () => {
       // Draw orbital trails first (behind everything)
       drawTrails(pr);
 
-      // draw inference lattice
+      // Draw core energy beams (radial connections)
+      drawCoreBeams(pr);
+
+      // draw inference lattice (state transitions)
       drawLattice(pr);
 
       drawRiskPulse(pr);
@@ -494,103 +612,127 @@ const CognitiveField = () => {
       [...pr]
         .sort((a, b) => a.z - b.z)
         .forEach((n) => {
-          const pulse = Math.sin(frame * 0.024 + n.ph);
+          const pulse = Math.sin(frame * 0.022 + n.ph);
           
           if (n.anchor) {
-            let stateColor = "0,232,122"; // default green
-            let sz = n.r * Math.max(0.7, n.scale) * 1.8;
+            let stateColor = "0,232,122";
+            let sz = n.r * Math.max(0.75, n.scale) * 2;
             
             if (n.state === "core") {
-              // CENTRAL CORE - massive and prominent
+              // CENTRAL INFERENCE CORE - dominant focal point
               stateColor = "0,232,122";
-              sz = n.r * Math.max(0.8, n.scale) * 2.2;
+              sz = n.r * Math.max(0.85, n.scale) * 2.5;
               
-              // Outer glow rings
-              for (let i = 3; i >= 1; i--) {
+              // Multi-layer glow aura
+              for (let i = 4; i >= 1; i--) {
                 ctx.beginPath();
-                ctx.arc(n.sx, n.sy, sz + 18 + i * 8 + pulse * 6, 0, 6.28);
-                ctx.strokeStyle = `rgba(${stateColor},${(0.08 / i) + pulse * 0.02})`;
-                ctx.lineWidth = 2 - i * 0.4;
+                ctx.arc(n.sx, n.sy, sz + 22 + i * 10 + pulse * 7, 0, Math.PI * 2);
+                ctx.strokeStyle = `rgba(${stateColor},${(0.1 / i) + pulse * 0.025})`;
+                ctx.lineWidth = 2.2 - i * 0.4;
                 ctx.stroke();
               }
               
-              // Main core circle
+              // Outer glow halo
+              const gradient = ctx.createRadialGradient(n.sx, n.sy, 0, n.sx, n.sy, sz + 15);
+              gradient.addColorStop(0, `rgba(${stateColor},0.18)`);
+              gradient.addColorStop(0.6, `rgba(${stateColor},0.08)`);
+              gradient.addColorStop(1, `rgba(${stateColor},0)`);
+              ctx.fillStyle = gradient;
               ctx.beginPath();
-              ctx.arc(n.sx, n.sy, sz, 0, 6.28);
-              ctx.fillStyle = `rgba(${stateColor},.25)`;
+              ctx.arc(n.sx, n.sy, sz + 15, 0, Math.PI * 2);
               ctx.fill();
-              ctx.strokeStyle = `rgba(${stateColor},.95)`;
-              ctx.lineWidth = 2.5;
+              
+              // Main core sphere
+              ctx.beginPath();
+              ctx.arc(n.sx, n.sy, sz, 0, Math.PI * 2);
+              ctx.fillStyle = `rgba(${stateColor},.28)`;
+              ctx.fill();
+              ctx.strokeStyle = `rgba(${stateColor},.98)`;
+              ctx.lineWidth = 3;
               ctx.stroke();
               
-              // Inner bright core
+              // Bright inner core with pulse
               ctx.beginPath();
-              ctx.arc(n.sx, n.sy, sz * 0.5, 0, 6.28);
-              ctx.fillStyle = `rgba(${stateColor},${0.6 + pulse * 0.15})`;
+              ctx.arc(n.sx, n.sy, sz * 0.55, 0, Math.PI * 2);
+              ctx.fillStyle = `rgba(${stateColor},${0.65 + pulse * 0.18})`;
               ctx.fill();
               
-              // Core label
-              ctx.font = "700 10px 'IBM Plex Mono',monospace";
-              ctx.textAlign = "center";
-              ctx.fillStyle = "rgba(255,255,255,.98)";
-              ctx.fillText("CORE", n.sx, n.sy + 3);
+              // Core center dot
+              ctx.beginPath();
+              ctx.arc(n.sx, n.sy, sz * 0.2, 0, Math.PI * 2);
+              ctx.fillStyle = `rgba(255,255,255,${0.8 + pulse * 0.2})`;
+              ctx.fill();
               
             } else {
-              // STATE NODES - clear and prominent
+              // STATE NODES - professional and clear
               if (n.state === "confusion") stateColor = "239,68,68";
               else if (n.state === "fatigue") stateColor = "245,158,11";
               else if (n.state === "residue") stateColor = "234,179,8";
               else if (n.state === "recovery") stateColor = "34,197,94";
               
-              sz = n.r * Math.max(0.7, n.scale) * 1.6;
+              sz = n.r * Math.max(0.75, n.scale) * 1.85;
+              
+              // Outer glow halo
+              const gradient = ctx.createRadialGradient(n.sx, n.sy, 0, n.sx, n.sy, sz + 12);
+              gradient.addColorStop(0, `rgba(${stateColor},0.15)`);
+              gradient.addColorStop(0.7, `rgba(${stateColor},0.05)`);
+              gradient.addColorStop(1, `rgba(${stateColor},0)`);
+              ctx.fillStyle = gradient;
+              ctx.beginPath();
+              ctx.arc(n.sx, n.sy, sz + 12, 0, Math.PI * 2);
+              ctx.fill();
               
               // Outer pulse ring
               ctx.beginPath();
-              ctx.arc(n.sx, n.sy, sz + 12 + pulse * 5, 0, 6.28);
-              ctx.strokeStyle = `rgba(${stateColor},${0.15 + pulse * 0.06})`;
-              ctx.lineWidth = 1.3;
+              ctx.arc(n.sx, n.sy, sz + 14 + pulse * 6, 0, Math.PI * 2);
+              ctx.strokeStyle = `rgba(${stateColor},${0.18 + pulse * 0.08})`;
+              ctx.lineWidth = 1.6;
               ctx.stroke();
               
-              // Main state circle
+              // Main state sphere
               ctx.beginPath();
-              ctx.arc(n.sx, n.sy, sz, 0, 6.28);
-              ctx.fillStyle = `rgba(${stateColor},.22)`;
+              ctx.arc(n.sx, n.sy, sz, 0, Math.PI * 2);
+              ctx.fillStyle = `rgba(${stateColor},.26)`;
               ctx.fill();
-              ctx.strokeStyle = `rgba(${stateColor},.9)`;
-              ctx.lineWidth = 2;
+              ctx.strokeStyle = `rgba(${stateColor},.95)`;
+              ctx.lineWidth = 2.4;
               ctx.stroke();
               
-              // Inner core
+              // Inner glowing core
               ctx.beginPath();
-              ctx.arc(n.sx, n.sy, sz * 0.45, 0, 6.28);
-              ctx.fillStyle = `rgba(${stateColor},${0.5 + pulse * 0.15})`;
+              ctx.arc(n.sx, n.sy, sz * 0.5, 0, Math.PI * 2);
+              ctx.fillStyle = `rgba(${stateColor},${0.55 + pulse * 0.18})`;
               ctx.fill();
               
-              // State label - clear and readable
+              // State ID (compact code)
               ctx.font = "700 9px 'IBM Plex Mono',monospace";
               ctx.textAlign = "center";
-              ctx.fillStyle = n.state === "confusion" ? "rgba(255,220,220,.98)" : "rgba(200,255,220,.98)";
-              ctx.fillText(n.id, n.sx, n.sy + 2.5);
-              
-              // Intensity percentage below node
-              if (n.intensity && n.scale > 0.65) {
-                ctx.font = "600 8px 'IBM Plex Mono',monospace";
-                ctx.fillStyle = `rgba(${stateColor},.7)`;
-                ctx.fillText(`${n.intensity}%`, n.sx, n.sy + sz + 12);
-              }
+              ctx.fillStyle = "rgba(255,255,255,.95)";
+              ctx.fillText(n.id, n.sx, n.sy + 2.8);
             }
           } else {
-            // Signal trace particles - very subtle
-            const sz = n.r * Math.max(0.5, n.scale);
+            // Signal trace particles - subtle but visible
+            const sz = n.r * Math.max(0.6, n.scale);
+            
+            // Soft glow
             ctx.beginPath();
-            ctx.arc(n.sx, n.sy, sz, 0, 6.28);
-            ctx.fillStyle = `rgba(0,232,122,${0.05 + n.scale * 0.04})`;
+            ctx.arc(n.sx, n.sy, sz + 3, 0, Math.PI * 2);
+            ctx.fillStyle = `rgba(0,232,122,${0.04 + n.scale * 0.03})`;
             ctx.fill();
-            ctx.strokeStyle = `rgba(0,232,122,${0.12 + pulse * 0.05})`;
-            ctx.lineWidth = 0.5;
+            
+            // Main particle
+            ctx.beginPath();
+            ctx.arc(n.sx, n.sy, sz, 0, Math.PI * 2);
+            ctx.fillStyle = `rgba(0,232,122,${0.08 + n.scale * 0.06})`;
+            ctx.fill();
+            ctx.strokeStyle = `rgba(0,232,122,${0.15 + pulse * 0.06})`;
+            ctx.lineWidth = 0.6;
             ctx.stroke();
           }
         });
+
+      // Draw external labels on top
+      drawExternalLabels(pr);
 
       drawHUD();
       raf = requestAnimationFrame(draw);
