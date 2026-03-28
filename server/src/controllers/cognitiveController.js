@@ -1,3 +1,4 @@
+import { createHash } from "crypto";
 import mongoose from "mongoose";
 
 const LIVE_API_BASE = (
@@ -83,6 +84,29 @@ async function fetchLiveDashboard() {
   }
 }
 
+async function fetchLiveJson(path, timeoutMs = 2500) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const response = await fetch(`${LIVE_API_BASE}${path}`, {
+      method: "GET",
+      headers: { Accept: "application/json" },
+      signal: controller.signal,
+    });
+
+    if (!response.ok) {
+      throw new Error(`Live API responded with ${response.status} for ${path}`);
+    }
+
+    return await response.json();
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 async function fetchMongoDashboardData(userId = "") {
   if (mongoose.connection.readyState !== 1 || !mongoose.connection.db) {
     return {
@@ -110,7 +134,7 @@ async function fetchMongoDashboardData(userId = "") {
     fatigueEvents,
     handoffCapsules,
   ] = await Promise.all([
-    collection("snapshots").find(filter).sort({ generated_at: -1 }).limit(120).toArray(),
+    collection("snapshots").find(filter).sort({ generated_at: -1 }).toArray(),
     collection("events").find(filter).sort({ created_at: -1 }).limit(12).toArray(),
     collection("artifacts").find(filter).sort({ created_at: -1 }).limit(40).toArray(),
     collection("confusion_episodes").find(filter).sort({ started_at: -1 }).limit(8).toArray(),
@@ -132,6 +156,183 @@ async function fetchMongoDashboardData(userId = "") {
     fatigueEvents,
     handoffCapsules,
   };
+}
+
+function mapSnapshotCurrent(snapshot) {
+  if (!snapshot) return null;
+
+  return {
+    generatedAt: serialiseDate(snapshot?.generated_at),
+    stateLabel: normaliseLabel(snapshot?.state_label, "unknown"),
+    classifierState: normaliseLabel(snapshot?.classifier_state, normaliseLabel(snapshot?.state_label, "unknown")),
+    confidence: round(Number(snapshot?.state?.confidence || snapshot?.confidence || 0), 2),
+    message: normaliseLabel(snapshot?.state?.message, ""),
+    activeApp: normaliseLabel(snapshot?.active_app, ""),
+    activeWindow: normaliseLabel(snapshot?.active_window, ""),
+    blinkRate: Number.isFinite(Number(snapshot?.camera?.blink_rate_per_min))
+      ? round(Number(snapshot.camera.blink_rate_per_min), 1)
+      : null,
+    perclos: Number.isFinite(Number(snapshot?.camera?.perclos))
+      ? round(Number(snapshot.camera.perclos))
+      : null,
+    expression: normaliseLabel(snapshot?.camera?.expression, "neutral"),
+    idleSeconds: Number.isFinite(Number(snapshot?.idle_seconds))
+      ? round(Number(snapshot.idle_seconds), 1)
+      : null,
+    scores: snapshot?.scores || {},
+    mlState: snapshot?.ml_state || null,
+    artifact: snapshot?.artifact || null,
+    detectionSource: normaliseLabel(
+      snapshot?.state?.detection_source || snapshot?.detection_source,
+      "cognitive_snapshots"
+    ),
+    onnx: snapshot?.core_features?.onnx_inference || null,
+    interruptionBroker: snapshot?.core_features?.interruption_broker || null,
+    timeTracker: snapshot?.time_tracker || null,
+  };
+}
+
+async function fetchMongoGraphData() {
+  if (mongoose.connection.readyState !== 1 || !mongoose.connection.db) {
+    return {
+      connected: false,
+      entities: [],
+      relations: [],
+      snapshots: [],
+      entityCount: 0,
+      relationCount: 0,
+      snapshotCount: 0,
+    };
+  }
+
+  const [entities, relations, snapshots, entityCount, relationCount, snapshotCount] = await Promise.all([
+    collection("entities").find({}).sort({ updated_at: -1 }).toArray(),
+    collection("relations").find({}).sort({ updated_at: -1 }).toArray(),
+    collection("snapshots").find({}).sort({ generated_at: -1 }).toArray(),
+    collection("entities").countDocuments({}),
+    collection("relations").countDocuments({}),
+    collection("snapshots").countDocuments({}),
+  ]);
+
+  return {
+    connected: true,
+    entities,
+    relations,
+    snapshots,
+    entityCount,
+    relationCount,
+    snapshotCount,
+  };
+}
+
+const graphId = (kind, ...parts) => {
+  const normalized = parts
+    .map((part) => String(part || "").trim().toLowerCase())
+    .filter(Boolean)
+    .join("||");
+  const digest = createHash("sha1")
+    .update(`${kind}::${normalized || "unknown"}`)
+    .digest("hex")
+    .slice(0, 16);
+  return `${kind}:${digest}`;
+};
+
+function buildSnapshotGraphData(snapshots = []) {
+  const entities = [];
+  const relations = [];
+  const seenEntities = new Set();
+  const seenRelations = new Set();
+
+  for (const snapshot of Array.isArray(snapshots) ? snapshots : []) {
+    const generatedAt = snapshot?.generated_at || snapshot?.created_at || null;
+    const stateLabel = normaliseLabel(snapshot?.state_label, "unknown");
+    const activeApp = normaliseLabel(snapshot?.active_app, "Unknown");
+    const activeWindow = normaliseLabel(snapshot?.active_window, "Unknown window");
+    const snapshotId =
+      normaliseLabel(snapshot?.snapshot_id, "") ||
+      normaliseLabel(String(snapshot?._id || ""), "") ||
+      normaliseLabel(String(generatedAt || ""), "");
+
+    if (!snapshotId) continue;
+
+    const snapshotNodeId = `mongo_snapshot:${snapshotId}`;
+    const appNodeId = graphId("app", activeApp);
+    const stateNodeId = graphId("state", stateLabel);
+    const windowNodeId = graphId("window", activeApp, activeWindow, snapshot?.active_pid || 0);
+
+    const upsertEntity = (entity) => {
+      const id = normaliseLabel(entity?.entity_id, "");
+      if (!id || seenEntities.has(id)) return;
+      seenEntities.add(id);
+      entities.push(entity);
+    };
+
+    const upsertRelation = (relation) => {
+      const key = `${relation.from_id}->${relation.to_id}:${relation.relation_type}`;
+      if (seenRelations.has(key)) return;
+      seenRelations.add(key);
+      relations.push(relation);
+    };
+
+    upsertEntity({
+      entity_id: snapshotNodeId,
+      entity_type: "snapshot",
+      label: String(generatedAt || snapshotId),
+      updated_at: generatedAt,
+      state_label: stateLabel,
+      active_app: activeApp,
+      active_window: activeWindow,
+      user_id: snapshot?.user_id || null,
+      source_collection: "cognitive_snapshots",
+    });
+
+    upsertEntity({
+      entity_id: appNodeId,
+      entity_type: "app",
+      label: activeApp,
+      updated_at: generatedAt,
+      source_collection: "cognitive_snapshots",
+    });
+
+    upsertEntity({
+      entity_id: stateNodeId,
+      entity_type: "state",
+      label: stateLabel,
+      updated_at: generatedAt,
+      source_collection: "cognitive_snapshots",
+    });
+
+    upsertEntity({
+      entity_id: windowNodeId,
+      entity_type: "window",
+      label: activeWindow,
+      updated_at: generatedAt,
+      source_collection: "cognitive_snapshots",
+    });
+
+    upsertRelation({
+      from_id: snapshotNodeId,
+      to_id: stateNodeId,
+      relation_type: "SNAPSHOT_STATE",
+      updated_at: generatedAt,
+    });
+
+    upsertRelation({
+      from_id: snapshotNodeId,
+      to_id: appNodeId,
+      relation_type: "SNAPSHOT_APP",
+      updated_at: generatedAt,
+    });
+
+    upsertRelation({
+      from_id: appNodeId,
+      to_id: windowNodeId,
+      relation_type: "SNAPSHOT_WINDOW",
+      updated_at: generatedAt,
+    });
+  }
+
+  return { entities, relations };
 }
 
 function buildStateDistribution(snapshots) {
@@ -299,7 +500,155 @@ function mapLiveCurrent(liveData) {
       ? round(Number(current.camera.perclos))
       : null,
     expression: normaliseLabel(current?.camera?.expression, "neutral"),
+    idleSeconds: Number.isFinite(Number(current?.idle_seconds))
+      ? round(Number(current.idle_seconds), 1)
+      : null,
+    scores: current?.scores || {},
+    mlState: current?.ml_state || null,
+    artifact: current?.artifact || null,
+    detectionSource: normaliseLabel(current?.state?.detection_source, "heuristic"),
+    onnx: current?.core_features?.onnx_inference || null,
+    interruptionBroker: current?.core_features?.interruption_broker || null,
     timeTracker: current?.time_tracker || null,
+  };
+}
+
+function buildGraphPayload({
+  mongoEntities = [],
+  mongoRelations = [],
+  mongoSnapshots = [],
+  liveEntities = [],
+  liveRelations = [],
+} = {}) {
+  const snapshotGraph = buildSnapshotGraphData(mongoSnapshots);
+  const sortedEntities = sortByDateDesc(
+    [
+      ...(Array.isArray(mongoEntities) ? mongoEntities : []),
+      ...snapshotGraph.entities,
+      ...(Array.isArray(liveEntities) ? liveEntities : []),
+    ],
+    "updated_at"
+  );
+  const nodeMap = new Map();
+  const dbNodeIds = new Set(
+    [...(Array.isArray(mongoEntities) ? mongoEntities : []), ...snapshotGraph.entities]
+      .map((entity) => normaliseLabel(entity?.entity_id, ""))
+      .filter(Boolean)
+  );
+  const liveNodeIds = new Set(
+    (Array.isArray(liveEntities) ? liveEntities : [])
+      .map((entity) => normaliseLabel(entity?.entity_id, ""))
+      .filter(Boolean)
+  );
+
+  for (const entity of sortedEntities) {
+    const id = normaliseLabel(entity?.entity_id, "");
+    if (!id || nodeMap.has(id)) continue;
+    const inDb = dbNodeIds.has(id);
+    const inLive = liveNodeIds.has(id);
+    nodeMap.set(id, {
+      id,
+      label: normaliseLabel(entity?.label, id),
+      type: normaliseLabel(entity?.entity_type, "default"),
+      updatedAt: serialiseDate(entity?.updated_at),
+      source: inDb && inLive ? "both" : inLive ? "live" : "db",
+    });
+  }
+
+  const nodes = [...nodeMap.values()];
+  const nodeIds = new Set(nodes.map((node) => node.id));
+  const links = [];
+  const seenLinks = new Set();
+  const dbLinkIds = new Set(
+    [...(Array.isArray(mongoRelations) ? mongoRelations : []), ...snapshotGraph.relations]
+      .map((relation) => {
+        const source = normaliseLabel(relation?.from_id, "");
+        const target = normaliseLabel(relation?.to_id, "");
+        const label = normaliseLabel(relation?.relation_type, "related_to");
+        return source && target ? `${source}->${target}:${label}` : "";
+      })
+      .filter(Boolean)
+  );
+  const liveLinkIds = new Set(
+    (Array.isArray(liveRelations) ? liveRelations : [])
+      .map((relation) => {
+        const source = normaliseLabel(relation?.from_id, "");
+        const target = normaliseLabel(relation?.to_id, "");
+        const label = normaliseLabel(relation?.relation_type, "related_to");
+        return source && target ? `${source}->${target}:${label}` : "";
+      })
+      .filter(Boolean)
+  );
+
+  for (const relation of sortByDateDesc(
+    [
+      ...(Array.isArray(mongoRelations) ? mongoRelations : []),
+      ...snapshotGraph.relations,
+      ...(Array.isArray(liveRelations) ? liveRelations : []),
+    ],
+    "updated_at"
+  )) {
+    const source = normaliseLabel(relation?.from_id, "");
+    const target = normaliseLabel(relation?.to_id, "");
+    if (!source || !target || !nodeIds.has(source) || !nodeIds.has(target)) continue;
+    const key = `${source}->${target}:${normaliseLabel(relation?.relation_type, "related_to")}`;
+    if (seenLinks.has(key)) continue;
+    seenLinks.add(key);
+    const inDb = dbLinkIds.has(key);
+    const inLive = liveLinkIds.has(key);
+    links.push({
+      source,
+      target,
+      label: normaliseLabel(relation?.relation_type, "related_to"),
+      updatedAt: serialiseDate(relation?.updated_at),
+      sourceKind: inDb && inLive ? "both" : inLive ? "live" : "db",
+    });
+  }
+
+  const degreeCounts = new Map();
+  for (const link of links) {
+    degreeCounts.set(link.source, (degreeCounts.get(link.source) || 0) + 1);
+    degreeCounts.set(link.target, (degreeCounts.get(link.target) || 0) + 1);
+  }
+
+  const enrichedNodes = nodes.map((node) => ({
+    ...node,
+    degree: degreeCounts.get(node.id) || 0,
+  }));
+
+  const typeCounts = nodes.reduce((accumulator, node) => {
+    accumulator[node.type] = (accumulator[node.type] || 0) + 1;
+    return accumulator;
+  }, {});
+  const sourceCounts = enrichedNodes.reduce(
+    (accumulator, node) => {
+      accumulator[node.source] = (accumulator[node.source] || 0) + 1;
+      return accumulator;
+    },
+    { db: 0, live: 0, both: 0 }
+  );
+  const linkSourceCounts = links.reduce(
+    (accumulator, link) => {
+      accumulator[link.sourceKind] = (accumulator[link.sourceKind] || 0) + 1;
+      return accumulator;
+    },
+    { db: 0, live: 0, both: 0 }
+  );
+
+  return {
+    nodes: enrichedNodes,
+    links,
+    stats: {
+      nodeCount: enrichedNodes.length,
+      relationCount: links.length,
+      nodeTypes: typeCounts,
+      nodeSources: sourceCounts,
+      relationSources: linkSourceCounts,
+      dbNodeCount: dbNodeIds.size,
+      liveNodeCount: liveNodeIds.size,
+      dbRelationCount: dbLinkIds.size,
+      liveRelationCount: liveLinkIds.size,
+    },
   };
 }
 
@@ -307,56 +656,36 @@ export const getCognitiveDashboard = async (_req, res) => {
   try {
     const mongoConnected = mongoose.connection.readyState === 1 && !!mongoose.connection.db;
 
-    const liveDashboard = await fetchLiveDashboard();
+    const [mongoData, mongoGraph] = await Promise.all([
+      fetchMongoDashboardData(),
+      fetchMongoGraphData(),
+    ]);
 
-    const liveData = liveDashboard.data || {};
-    const liveUserId = normaliseLabel(liveData?.current?.user_id, "");
-    const liveHistory = Array.isArray(liveData.history) ? liveData.history : [];
-    const liveSnapshots = liveHistory.length
-      ? liveHistory
-      : liveData.current
-        ? [liveData.current]
-        : [];
-    const mongoData = await fetchMongoDashboardData(liveUserId);
-    const useMongoAnalytics = mongoData.connected && mongoData.snapshots.length > 0;
-    const useLiveAnalytics = !useMongoAnalytics && liveDashboard.connected && liveSnapshots.length > 0;
+    const snapshots = sortByDateDesc(mongoData.snapshots, "generated_at");
+    const events = mongoData.events;
+    const artifacts = mongoData.artifacts;
+    const confusionEpisodes = mongoData.confusionEpisodes;
+    const residueEvents = mongoData.residueEvents;
+    const preErrorEvents = mongoData.preErrorEvents;
+    const fatigueEvents = mongoData.fatigueEvents;
+    const handoffCapsules = mongoData.handoffCapsules;
 
-    const snapshots = useMongoAnalytics
-      ? mongoData.snapshots
-      : sortByDateDesc(liveSnapshots, "generated_at");
-    const events = useMongoAnalytics
-      ? mongoData.events
-      : sortByDateDesc(Array.isArray(liveData.events) ? liveData.events : [], "created_at");
-    const artifacts = useMongoAnalytics
-      ? mongoData.artifacts
-      : sortByDateDesc(Array.isArray(liveData.friction_hotspots) ? liveData.friction_hotspots : [], "created_at");
-    const confusionEpisodes = useMongoAnalytics
-      ? mongoData.confusionEpisodes
-      : sortByDateDesc(Array.isArray(liveData.confusion_episodes) ? liveData.confusion_episodes : [], "started_at");
-    const residueEvents = useMongoAnalytics
-      ? mongoData.residueEvents
-      : (Array.isArray(liveData.attention_residue_events) ? liveData.attention_residue_events.length : 0);
-    const preErrorEvents = useMongoAnalytics
-      ? mongoData.preErrorEvents
-      : (Array.isArray(liveData.pre_error_events) ? liveData.pre_error_events.length : 0);
-    const fatigueEvents = useMongoAnalytics
-      ? mongoData.fatigueEvents
-      : (Array.isArray(liveData.fatigue_events) ? liveData.fatigue_events.length : 0);
-    const handoffCapsules = useMongoAnalytics
-      ? mongoData.handoffCapsules
-      : (Array.isArray(liveData.handoff_capsules) ? liveData.handoff_capsules.length : 0);
-
-    if (!snapshots.length && !liveDashboard.connected && !mongoData.connected) {
+    if (!snapshots.length && !mongoData.connected) {
       return res.status(503).json({
         ok: false,
-        message: "Neither the live cognitive backend nor MongoDB analytics are available.",
+        message: "MongoDB cognitive snapshots are not available.",
       });
     }
 
     const distribution = buildStateDistribution(snapshots);
-    const latestSnapshot = snapshots[0] || liveData.current || null;
-    const liveCurrent = mapLiveCurrent(liveDashboard.data);
+    const latestSnapshot = snapshots[0] || null;
+    const liveCurrent = mapSnapshotCurrent(latestSnapshot);
     const timeline = buildTimeline(snapshots);
+    const graph = buildGraphPayload({
+      mongoEntities: mongoGraph.entities,
+      mongoRelations: mongoGraph.relations,
+      mongoSnapshots: mongoGraph.snapshots,
+    });
 
     const summary = {
       snapshotCount: snapshots.length,
@@ -421,16 +750,17 @@ export const getCognitiveDashboard = async (_req, res) => {
       generatedAt: new Date().toISOString(),
       source: {
         mongoConnected,
-        liveConnected: liveDashboard.connected,
+        liveConnected: false,
         liveUrl: LIVE_API_BASE,
-        liveError: liveDashboard.error,
-        analyticsSource: useMongoAnalytics ? "cognitive_snapshots" : "live_backend",
-        analyticsUserId: useMongoAnalytics ? mongoData.userId : liveUserId || null,
+        liveError: "Dashboard is using MongoDB-only analytics.",
+        analyticsSource: "cognitive_snapshots",
+        analyticsUserId: mongoData.userId,
       },
       summary,
       live: {
         current: liveCurrent,
-        teamRollup: liveDashboard.data?.team_rollup || null,
+        teamRollup: null,
+        graph,
       },
       analytics: {
         stateDistribution: distribution,
