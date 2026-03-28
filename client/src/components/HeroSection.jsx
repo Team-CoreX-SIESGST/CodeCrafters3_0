@@ -8,9 +8,9 @@ const STATS = [
 ];
 
 // ══════════════════════════════════════════════════════════════════
-//  NetworkOrb — pure-canvas 3-D perspective network globe
+//  CognitiveField — asymmetric signal lattice for NeuroTrace
 // ══════════════════════════════════════════════════════════════════
-const NetworkOrb = () => {
+const CognitiveField = () => {
   const cvs = useRef(null);
 
   useEffect(() => {
@@ -31,7 +31,7 @@ const NetworkOrb = () => {
     resize();
     window.addEventListener("resize", resize);
 
-    /* ── 3-D math ─────────────────────────────────────────────── */
+    /* ── 3-D math (reused from original) ──────────────────────── */
     const ry = (x, y, z, a) => ({
       x: x * Math.cos(a) + z * Math.sin(a),
       y,
@@ -43,155 +43,264 @@ const NetworkOrb = () => {
       z: y * Math.sin(a) + z * Math.cos(a),
     });
     const prj = (x, y, z) => {
-      const R = Math.min(W, H) * 0.3;
+      const R = Math.min(W, H) * 0.48;
       const s = 440 / (440 + z + R * 0.55);
       return { sx: W / 2 + x * s, sy: H / 2 + y * s + 12, scale: s, z };
     };
-    const R = () => Math.min(W, H) * 0.3;
+    const R = () => Math.min(W, H) * 0.48;
 
-    /* ── build scene ──────────────────────────────────────────── */
+    /* ── build cognitive field scene ──────────────────────────── */
     const buildScene = () => {
       const r = R() || 130;
       const nds = [];
 
-      // 13 background nodes on sphere (golden-angle distribution)
-      for (let i = 0; i < 13; i++) {
-        const phi = Math.acos(1 - (2 * (i + 0.5)) / 13);
-        const th = Math.PI * (1 + Math.sqrt(5)) * i;
+      // Central inference core - STATIONARY (no orbit)
+      nds.push({
+        ox: 0,
+        oy: 0,
+        oz: r * 0.25,
+        id: "CORE",
+        label: "Inference Core",
+        state: "core",
+        intensity: 100,
+        anchor: true,
+        r: 12,
+        ph: 0,
+        stationary: true, // Core doesn't move
+        orbitRadius: 0,
+        orbitAngle: 0,
+        orbitSpeed: 0,
+      });
+
+      // State anchor nodes - each orbits on its ring
+      // Orbital speed inversely proportional to radius (inner = faster, like real physics)
+      const stateAnchors = [
+        { 
+          orbitRadius: 0.85, startAngle: 0, 
+          id: "FOCUS", state: "focus", intensity: 92,
+          orbitSpeed: 0.00045, // outer ring, slower
+        },
+        { 
+          orbitRadius: 0.72, startAngle: Math.PI * 0.4, 
+          id: "CONF", state: "confusion", intensity: 87,
+          orbitSpeed: 0.00065, // middle ring, medium speed
+        },
+        { 
+          orbitRadius: 0.88, startAngle: Math.PI * 1.2, 
+          id: "FTIG", state: "fatigue", intensity: 71,
+          orbitSpeed: 0.00040, // outermost ring, slowest
+        },
+        { 
+          orbitRadius: 0.72, startAngle: Math.PI * 1.7, 
+          id: "RESID", state: "residue", intensity: 64,
+          orbitSpeed: 0.00065, // middle ring, medium speed
+        },
+        { 
+          orbitRadius: 0.85, startAngle: Math.PI, 
+          id: "RECOV", state: "recovery", intensity: 78,
+          orbitSpeed: 0.00045, // outer ring, slower
+        },
+      ];
+
+      stateAnchors.forEach((s) => {
         nds.push({
-          ox: r * Math.sin(phi) * Math.cos(th),
-          oy: r * Math.sin(phi) * Math.sin(th) * 0.72,
-          oz: r * Math.cos(phi),
-          flagged: false,
-          r: 2.6 + Math.random() * 2.2,
+          ...s,
+          anchor: true,
+          r: 10,
+          ph: Math.random() * 6.28,
+          stationary: false,
+          orbitAngle: s.startAngle,
+          // Position will be calculated dynamically each frame
+          ox: 0,
+          oy: 0,
+          oz: r * 0.25,
+        });
+      });
+
+      // Signal trace particles on inner orbits - faster orbital speeds
+      for (let i = 0; i < 28; i++) {
+        const ringIdx = i % 4;
+        const orbitRadius = 0.25 + ringIdx * 0.12; // 4 inner orbital rings
+        const startAngle = (i / 7) * Math.PI * 2 + (ringIdx * 0.4);
+        
+        // Inner rings orbit MUCH faster (inverse square for dramatic effect)
+        const orbitSpeed = 0.0015 / (orbitRadius * orbitRadius);
+        
+        nds.push({
+          orbitRadius,
+          orbitAngle: startAngle,
+          orbitSpeed,
+          anchor: false,
+          r: 2.2,
           ph: Math.random() * 6.28,
           id: null,
-          score: null,
+          stationary: false,
+          ox: 0,
+          oy: 0,
+          oz: r * 0.25 + (Math.random() - 0.5) * r * 0.15,
         });
       }
 
-      // 3 high-signal nodes with strong forward Z for visibility
-      [
-        { ox: r * 0.44, oy: -r * 0.54, oz: r * 0.64, id: "CF", score: 91 },
-        { ox: r * 0.83, oy: r * 0.24, oz: r * 0.33, id: "AR", score: 78 },
-        { ox: r * 0.14, oy: r * 0.73, oz: r * 0.5, id: "FT", score: 65 },
-      ].forEach((s) =>
-        nds.push({ ...s, flagged: true, r: 7, ph: Math.random() * 6.28 }),
+      // Inference paths - connect core to states, and states in cycle
+      const paths = [];
+      
+      // Core connections to all state anchors (radial)
+      for (let i = 1; i <= 5; i++) {
+        paths.push({ a: 0, b: i, type: "core", curve: 0 });
+      }
+
+      // State transition cycle (curved connections between orbiting states)
+      paths.push(
+        { a: 1, b: 2, type: "transition", curve: 0.15 },  // Focus → Confusion
+        { a: 2, b: 3, type: "transition", curve: 0.12 }, // Confusion → Fatigue
+        { a: 3, b: 5, type: "transition", curve: 0.15 },  // Fatigue → Recovery
+        { a: 5, b: 1, type: "transition", curve: 0.12 }, // Recovery → Focus
+        { a: 4, b: 2, type: "drift", curve: 0.2 },      // Residue → Confusion
+        { a: 1, b: 4, type: "drift", curve: -0.15 },      // Focus → Residue
       );
 
-      // edges: connect close normal nodes + suspicious loop
-      const eds = [];
-      for (let i = 0; i < 13; i++)
-        for (let j = i + 1; j < 13; j++) {
-          const d = Math.hypot(
-            nds[i].ox - nds[j].ox,
-            nds[i].oy - nds[j].oy,
-            nds[i].oz - nds[j].oz,
-          );
-          if (d < r * 0.9) eds.push({ a: i, b: j, sus: false });
-        }
-      const S0 = eds.length;
-      eds.push(
-        { a: 13, b: 14, sus: true },
-        { a: 14, b: 15, sus: true },
-        { a: 15, b: 13, sus: true },
-      );
-      return { nds, eds, S0 };
+      return { nds, paths };
     };
 
-    let { nds: nodes, eds: edges, S0: SUSP0 } = buildScene();
+    let { nds: nodes, paths } = buildScene();
 
-    // money flow particles on the suspicious loop
-    const ptcls = [
-      { ei: SUSP0, t: 0.0, sp: 0.0048 },
-      { ei: SUSP0 + 1, t: 0.35, sp: 0.0053 },
-      { ei: SUSP0 + 2, t: 0.7, sp: 0.0044 },
-      { ei: SUSP0, t: 0.6, sp: 0.0039 },
-      { ei: SUSP0 + 1, t: 0.15, sp: 0.0051 },
+    // Initialize trail history for each node
+    nodes.forEach((n) => {
+      if (!n.stationary) {
+        n.trail = []; // Store recent positions for trail rendering
+        n.trailLength = n.anchor ? 25 : 15; // State nodes have longer trails
+      }
+    });
+
+    // Signal pulses flowing along inference paths
+    const pulses = [
+      { pi: 0, t: 0.0, sp: 0.0042 }, // Core to Focus
+      { pi: 2, t: 0.25, sp: 0.0038 }, // Core to Confusion
+      { pi: 4, t: 0.5, sp: 0.0045 }, // Core to Recovery
+      { pi: 6, t: 0.15, sp: 0.0048 }, // Focus → Confusion
+      { pi: 7, t: 0.65, sp: 0.0041 }, // Confusion → Fatigue
+      { pi: 8, t: 0.85, sp: 0.0044 }, // Fatigue → Recovery
+      { pi: 10, t: 0.35, sp: 0.0039 }, // Residue → Confusion
     ];
 
-    let angle = 0,
-      frame = 0,
+    let frame = 0,
       scanRing = 0,
       scanActive = false;
-    // ambient data-stream lines (atmospheric)
-    const streams = Array.from({ length: 6 }, (_, i) => ({
-      y: (i / 6) * 0.9 + 0.05,
-      sp: 0.0018 + Math.random() * 0.0012,
+
+    // Ambient signal streams
+    const streams = Array.from({ length: 7 }, (_, i) => ({
+      y: (i / 7) * 0.88 + 0.06,
+      sp: 0.0016 + Math.random() * 0.0014,
       x: Math.random(),
-      al: 0.07 + Math.random() * 0.09,
+      al: 0.06 + Math.random() * 0.08,
     }));
-    const TILT = 0.23;
+    const TILT = 0.18;
 
-    /* ── wireframe sphere ─────────────────────────────────────── */
-    const drawSphere = () => {
+    /* ── draw orbital rings ───────────────────────────────────── */
+    const drawOrbitalRings = () => {
       const r = R();
-      if (!r) return;
-      // Thicker and darker grid lines
-      ctx.lineWidth = 0.8;
-      const drawPath = (fn) => {
+      const cx = W / 2;
+      const cy = H / 2 + 12;
+      
+      // Draw concentric orbital rings with subtle breathing animation
+      [0.25, 0.37, 0.49, 0.61, 0.72, 0.85, 0.88].forEach((mult, i) => {
+        const ringR = r * mult * (1 + Math.sin(frame * 0.0008 + i * 0.4) * 0.015);
         ctx.beginPath();
-        for (let i = 0; i <= 38; i++) {
-          let p = fn(i / 38);
-          let t = ry(p.x, p.y, p.z, angle);
-          t = rx(t.x, t.y, t.z, TILT);
-          const { sx, sy } = prj(t.x, t.y, t.z);
-          i === 0 ? ctx.moveTo(sx, sy) : ctx.lineTo(sx, sy);
-        }
-        ctx.strokeStyle = "rgba(0,232,122,0.2)"; // darker
+        ctx.ellipse(cx, cy, ringR, ringR * 0.7, 0, 0, Math.PI * 2);
+        ctx.strokeStyle = `rgba(0,232,122,${0.06 + i * 0.015})`;
+        ctx.lineWidth = 0.5;
+        ctx.setLineDash([6, 5]);
         ctx.stroke();
-      };
-
-      // Latitude lines (parallels) – already full circles
-      for (let lat = -60; lat <= 60; lat += 20) {
-        const y0 = r * Math.sin((lat * Math.PI) / 180);
-        const lr = Math.sqrt(Math.max(0, r * r - y0 * y0));
-        drawPath((t) => ({
-          x: lr * Math.cos(t * 6.28),
-          y: y0,
-          z: lr * Math.sin(t * 6.28),
-        }));
-      }
-
-      // Longitude lines (meridians) – now full 360°
-      for (let lon = 0; lon < 360; lon += 20) {
-        const a0 = (lon * Math.PI) / 180;
-        drawPath((t) => {
-          const phi = t * Math.PI - Math.PI / 2; // from -90° to +90°
-          return {
-            x: r * Math.cos(phi) * Math.cos(a0),
-            y: r * Math.sin(phi),
-            z: r * Math.cos(phi) * Math.sin(a0),
-          };
-        });
-      }
+        ctx.setLineDash([]);
+      });
     };
 
-    /* ── sonar scan rings ─────────────────────────────────────── */
-    const drawScan = (pr) => {
+    /* ── draw orbital trails ──────────────────────────────────── */
+    const drawTrails = (pr) => {
+      pr.forEach((n) => {
+        if (!n.trail || n.trail.length < 2) return;
+        
+        // Determine trail color based on node type
+        let trailColor = "0,232,122"; // default green
+        if (n.state === "confusion") trailColor = "239,68,68";
+        else if (n.state === "fatigue") trailColor = "245,158,11";
+        else if (n.state === "residue") trailColor = "234,179,8";
+        else if (n.state === "recovery") trailColor = "34,197,94";
+        
+        // Draw trail as connected segments with fading opacity
+        for (let i = 1; i < n.trail.length; i++) {
+          const prev = n.trail[i - 1];
+          const curr = n.trail[i];
+          const alpha = (i / n.trail.length) * (n.anchor ? 0.25 : 0.15);
+          
+          ctx.beginPath();
+          ctx.moveTo(prev.sx, prev.sy);
+          ctx.lineTo(curr.sx, curr.sy);
+          ctx.strokeStyle = `rgba(${trailColor},${alpha})`;
+          ctx.lineWidth = n.anchor ? 1.2 : 0.6;
+          ctx.stroke();
+        }
+      });
+    };
+
+    /* ── draw inference lattice (curved paths) ────────────────── */
+    const drawLattice = (pr) => {
+      paths.forEach((p) => {
+        const a = pr[p.a];
+        const b = pr[p.b];
+        if (!a || !b) return;
+
+        // Create curved path using quadratic bezier
+        const mx = (a.sx + b.sx) / 2;
+        const my = (a.sy + b.sy) / 2;
+        const dx = b.sx - a.sx;
+        const dy = b.sy - a.sy;
+        const cpx = mx - dy * p.curve;
+        const cpy = my + dx * p.curve;
+
+        ctx.beginPath();
+        ctx.moveTo(a.sx, a.sy);
+        if (p.curve !== 0) {
+          ctx.quadraticCurveTo(cpx, cpy, b.sx, b.sy);
+        } else {
+          ctx.lineTo(b.sx, b.sy);
+        }
+
+        if (p.type === "core") {
+          ctx.strokeStyle = "rgba(0,232,122,0.25)";
+          ctx.lineWidth = 1.5;
+        } else if (p.type === "transition") {
+          ctx.strokeStyle = "rgba(0,232,122,0.4)";
+          ctx.lineWidth = 1.8;
+        } else if (p.type === "drift") {
+          ctx.setLineDash([5, 4]);
+          ctx.strokeStyle = "rgba(245,158,11,0.35)";
+          ctx.lineWidth = 1.4;
+        }
+        ctx.stroke();
+        ctx.setLineDash([]);
+      });
+    };
+
+    /* ── state risk pulse (replaces scan ring) ────────────────── */
+    const drawRiskPulse = (pr) => {
       if (!scanActive) return;
-      const sus = pr.slice(13);
-      const cx = sus.reduce((s, n) => s + n.sx, 0) / sus.length;
-      const cy = sus.reduce((s, n) => s + n.sy, 0) / sus.length;
-      const maxR = R() * 0.85;
-      [1, 0.62, 0.34].forEach((mult, i) => {
-        const t = Math.max(0, scanRing - i * 0.13);
+      // Pulse from confusion node (index 2 - after core at 0 and focus at 1)
+      const confNode = pr[2];
+      if (!confNode) return;
+      const maxR = R() * 0.7;
+      [1, 0.7, 0.45].forEach((mult, i) => {
+        const t = Math.max(0, scanRing - i * 0.11);
         if (t <= 0) return;
         const ringR = t * maxR * mult;
-        const alpha = (1 - t) * (0.38 - i * 0.1);
+        const alpha = (1 - t) * (0.35 - i * 0.09);
         if (alpha <= 0) return;
         ctx.beginPath();
-        ctx.arc(cx, cy, ringR, 0, 6.28);
+        ctx.arc(confNode.sx, confNode.sy, ringR, 0, 6.28);
         ctx.strokeStyle = `rgba(239,68,68,${alpha})`;
-        ctx.lineWidth = i === 0 ? 1.5 : 0.8;
+        ctx.lineWidth = i === 0 ? 1.6 : 0.8;
         ctx.stroke();
       });
-      if (scanRing < 0.28) {
-        ctx.beginPath();
-        ctx.arc(cx, cy, 4, 0, 6.28);
-        ctx.fillStyle = `rgba(239,68,68,${(1 - scanRing / 0.28) * 0.45})`;
-        ctx.fill();
-      }
     };
 
     /* ── HUD corners + readouts ───────────────────────────────── */
@@ -217,15 +326,15 @@ const NetworkOrb = () => {
       ctx.font = "500 8px 'IBM Plex Mono',monospace";
       ctx.textAlign = "left";
       ctx.fillStyle = "rgba(0,232,122,.42)";
-      ctx.fillText("COGNITIVE STATE v1.0", pad + 3, pad + 20);
+      ctx.fillText("NEUROTRACE // COGNITIVE FIELD", pad + 3, pad + 20);
       ctx.fillStyle = "rgba(0,232,122,.22)";
       ctx.fillText(
-        `SIGNALS: ${nodes.length}  LINKS: ${edges.length}`,
+        `STATES: ${5}  TRACES: ${nodes.length}`,
         pad + 3,
         pad + 32,
       );
       ctx.fillText(
-        `FRAME: ${String(frame % 1000).padStart(4, "0")}`,
+        `INFERENCE: ${String(frame % 1000).padStart(4, "0")}`,
         pad + 3,
         pad + 44,
       );
@@ -234,25 +343,25 @@ const NetworkOrb = () => {
       ctx.textAlign = "right";
       ctx.font = "700 8px 'IBM Plex Mono',monospace";
       ctx.fillStyle = "rgba(239,68,68,.72)";
-      ctx.fillText("⚠ CONFUSION SPIKE", W - pad - 3, pad + 20);
+      ctx.fillText("⚠ CONFUSION RISK", W - pad - 3, pad + 20);
       ctx.font = "500 8px 'IBM Plex Mono',monospace";
       ctx.fillStyle = "rgba(239,68,68,.42)";
-      ctx.fillText("CONF: 91 · 3 MIN", W - pad - 3, pad + 32);
-      ctx.fillText("ATTENTION RESIDUE", W - pad - 3, pad + 44);
+      ctx.fillText("INTENSITY: 87%", W - pad - 3, pad + 32);
+      ctx.fillText("FATIGUE DRIFT DETECTED", W - pad - 3, pad + 44);
 
       // bottom state flow chain
       ctx.textAlign = "center";
       ctx.fillStyle = "rgba(0,232,122,.17)";
       ctx.font = "400 8px 'IBM Plex Mono',monospace";
-      ctx.fillText("FOCUS  →  DRIFT  →  CONFUSION  →  RECOVERY", W / 2, H - pad - 3);
+      ctx.fillText("PASSIVE SIGNALS ACTIVE · STATE INFERENCE ONGOING", W / 2, H - pad - 3);
 
-      // scan progress bar
+      // inference progress bar
       const bw = 70,
         bX = W / 2 - 35,
         bY = H - pad - 15;
       ctx.fillStyle = "rgba(0,232,122,.08)";
       ctx.fillRect(bX, bY, bw, 2);
-      ctx.fillStyle = "rgba(239,68,68,.48)";
+      ctx.fillStyle = "rgba(0,232,122,.48)";
       ctx.fillRect(bX, bY, bw * ((frame % 160) / 160), 2);
     };
 
@@ -260,163 +369,225 @@ const NetworkOrb = () => {
     let raf;
     const draw = () => {
       frame++;
-      angle += 0.0042;
       ctx.clearRect(0, 0, W, H);
 
-      // trigger scan ring every 160 frames
+      // trigger risk pulse every 160 frames
       if (frame % 160 === 0) {
         scanActive = true;
         scanRing = 0.01;
       }
       if (scanActive) {
-        scanRing += 0.013;
+        scanRing += 0.012;
         if (scanRing >= 1.05) {
           scanActive = false;
           scanRing = 0;
         }
       }
 
-      ptcls.forEach((p) => {
+      pulses.forEach((p) => {
         p.t = (p.t + p.sp) % 1;
       });
 
-      // ambient streams
+      // ambient signal streams
       streams.forEach((s) => {
         s.x = (s.x + s.sp) % 1.3;
         const x = s.x * W,
           y = s.y * H;
         ctx.beginPath();
         ctx.moveTo(x, y);
-        ctx.lineTo(x - 26, y + 11);
+        ctx.lineTo(x - 24, y + 9);
         ctx.strokeStyle = `rgba(0,232,122,${s.al})`;
-        ctx.lineWidth = 0.45;
+        ctx.lineWidth = 0.4;
         ctx.stroke();
         ctx.beginPath();
-        ctx.arc(x, y, 1.4, 0, 6.28);
-        ctx.fillStyle = `rgba(0,232,122,${s.al * 1.8})`;
+        ctx.arc(x, y, 1.2, 0, 6.28);
+        ctx.fillStyle = `rgba(0,232,122,${s.al * 1.6})`;
         ctx.fill();
       });
 
-      drawSphere();
+      // Draw orbital ring structure first
+      drawOrbitalRings();
 
-      // project all nodes
+      // Update orbital positions and project all nodes
+      const r = R();
       const pr = nodes.map((n) => {
-        let p = ry(n.ox, n.oy, n.oz, angle);
-        p = rx(p.x, p.y, p.z, TILT);
-        return { ...n, ...prj(p.x, p.y, p.z) };
-      });
-
-      // draw edges
-      edges.forEach((e) => {
-        const a = pr[e.a],
-          b = pr[e.b];
-        ctx.beginPath();
-        ctx.moveTo(a.sx, a.sy);
-        ctx.lineTo(b.sx, b.sy);
-        if (e.sus) {
-          ctx.setLineDash([6, 4]);
-          ctx.strokeStyle = "rgba(239,68,68,.6)";
-          ctx.lineWidth = 1.5;
+        let ox, oy, oz;
+        
+        if (n.stationary) {
+          // Core stays at origin
+          ox = n.ox;
+          oy = n.oy;
+          oz = n.oz;
         } else {
-          ctx.setLineDash([]);
-          const az = (a.z + b.z) / 2,
-            r = R();
-          // Increased opacity for better visibility (range 0.1 to 0.5)
-          const alpha = Math.max(0.1, ((az + r) / (2 * r)) * 0.4 + 0.1);
-          ctx.strokeStyle = `rgba(0,232,122,${alpha})`;
-          ctx.lineWidth = 0.6;
+          // Update orbital angle based on orbital speed
+          n.orbitAngle += n.orbitSpeed;
+          if (n.orbitAngle > Math.PI * 2) n.orbitAngle -= Math.PI * 2;
+          
+          // Calculate position on orbital ring
+          const ringR = r * n.orbitRadius;
+          ox = ringR * Math.cos(n.orbitAngle);
+          oy = ringR * Math.sin(n.orbitAngle) * 0.7; // elliptical for perspective
+          oz = n.oz; // maintain z-layer
         }
-        ctx.stroke();
-        ctx.setLineDash([]);
+        
+        // Apply subtle 3D tilt for depth (but no rotation - nodes orbit on rings)
+        let p = rx(ox, oy, oz, TILT);
+        const projected = { ...n, ...prj(p.x, p.y, p.z) };
+        
+        // Record position in trail (every frame for anchors, every 2 frames for particles)
+        if (!n.stationary && (n.anchor || frame % 2 === 0)) {
+          if (!n.trail) n.trail = [];
+          n.trail.push({ sx: projected.sx, sy: projected.sy });
+          if (n.trail.length > n.trailLength) n.trail.shift();
+        }
+        
+        return projected;
       });
 
-      drawScan(pr);
+      // Draw orbital trails first (behind everything)
+      drawTrails(pr);
 
-      // money particles
-      ptcls.forEach((p) => {
-        const e = edges[p.ei],
-          a = pr[e.a],
-          b = pr[e.b];
-        const px = a.sx + (b.sx - a.sx) * p.t,
-          py = a.sy + (b.sy - a.sy) * p.t;
+      // draw inference lattice
+      drawLattice(pr);
+
+      drawRiskPulse(pr);
+
+      // draw signal pulses along paths
+      pulses.forEach((p) => {
+        const path = paths[p.pi];
+        if (!path) return;
+        const a = pr[path.a];
+        const b = pr[path.b];
+        if (!a || !b) return;
+
+        // Calculate point on curved path using quadratic bezier
+        const t = p.t;
+        const mx = (a.sx + b.sx) / 2;
+        const my = (a.sy + b.sy) / 2;
+        const dx = b.sx - a.sx;
+        const dy = b.sy - a.sy;
+        const cpx = mx - dy * path.curve;
+        const cpy = my + dx * path.curve;
+
+        // Quadratic bezier formula: B(t) = (1-t)²P0 + 2(1-t)tP1 + t²P2
+        const it = 1 - t;
+        const px = it * it * a.sx + 2 * it * t * cpx + t * t * b.sx;
+        const py = it * it * a.sy + 2 * it * t * cpy + t * t * b.sy;
+
+        // Draw pulse
         ctx.beginPath();
-        ctx.arc(px, py, 6, 0, 6.28);
-        ctx.fillStyle = "rgba(239,68,68,.08)";
+        ctx.arc(px, py, 5, 0, 6.28);
+        ctx.fillStyle = "rgba(0,232,122,.08)";
         ctx.fill();
         ctx.beginPath();
-        ctx.arc(px, py, 2.6, 0, 6.28);
-        ctx.fillStyle = "rgba(239,68,68,.92)";
+        ctx.arc(px, py, 2.2, 0, 6.28);
+        ctx.fillStyle = "rgba(0,232,122,.92)";
         ctx.fill();
-        // specular highlight
+        // subtle glow
         ctx.beginPath();
-        ctx.arc(px - 0.6, py - 0.6, 1, 0, 6.28);
-        ctx.fillStyle = "rgba(255,160,155,.55)";
+        ctx.arc(px - 0.5, py - 0.5, 0.9, 0, 6.28);
+        ctx.fillStyle = "rgba(180,255,200,.5)";
         ctx.fill();
       });
 
-      // nodes — painter's algorithm (back → front)
+      // draw nodes — painter's algorithm (back → front)
       [...pr]
         .sort((a, b) => a.z - b.z)
         .forEach((n) => {
-          const pulse = Math.sin(frame * 0.028 + n.ph);
-          const sz = n.r * Math.max(0.6, n.scale) * 1.55;
-
-          if (n.flagged) {
-            // outer sonar ring
-            ctx.beginPath();
-            ctx.arc(n.sx, n.sy, sz + 10 + pulse * 5, 0, 6.28);
-            ctx.strokeStyle = `rgba(239,68,68,${0.1 + pulse * 0.04})`;
-            ctx.lineWidth = 1;
-            ctx.stroke();
-            // mid ring
-            ctx.beginPath();
-            ctx.arc(n.sx, n.sy, sz + 3, 0, 6.28);
-            ctx.strokeStyle = "rgba(239,68,68,.18)";
-            ctx.lineWidth = 0.6;
-            ctx.stroke();
-            // filled node
-            ctx.beginPath();
-            ctx.arc(n.sx, n.sy, sz, 0, 6.28);
-            ctx.fillStyle = "rgba(239,68,68,.24)";
-            ctx.fill();
-            ctx.strokeStyle = "rgba(239,68,68,.82)";
-            ctx.lineWidth = 1.5;
-            ctx.stroke();
-            // bright inner core
-            ctx.beginPath();
-            ctx.arc(n.sx, n.sy, sz * 0.4, 0, 6.28);
-            ctx.fillStyle = `rgba(239,68,68,${0.34 + pulse * 0.1})`;
-            ctx.fill();
-            // ID label
-            if (n.scale > 0.62) {
-              ctx.font = "700 8px 'IBM Plex Mono',monospace";
+          const pulse = Math.sin(frame * 0.024 + n.ph);
+          
+          if (n.anchor) {
+            let stateColor = "0,232,122"; // default green
+            let sz = n.r * Math.max(0.7, n.scale) * 1.8;
+            
+            if (n.state === "core") {
+              // CENTRAL CORE - massive and prominent
+              stateColor = "0,232,122";
+              sz = n.r * Math.max(0.8, n.scale) * 2.2;
+              
+              // Outer glow rings
+              for (let i = 3; i >= 1; i--) {
+                ctx.beginPath();
+                ctx.arc(n.sx, n.sy, sz + 18 + i * 8 + pulse * 6, 0, 6.28);
+                ctx.strokeStyle = `rgba(${stateColor},${(0.08 / i) + pulse * 0.02})`;
+                ctx.lineWidth = 2 - i * 0.4;
+                ctx.stroke();
+              }
+              
+              // Main core circle
+              ctx.beginPath();
+              ctx.arc(n.sx, n.sy, sz, 0, 6.28);
+              ctx.fillStyle = `rgba(${stateColor},.25)`;
+              ctx.fill();
+              ctx.strokeStyle = `rgba(${stateColor},.95)`;
+              ctx.lineWidth = 2.5;
+              ctx.stroke();
+              
+              // Inner bright core
+              ctx.beginPath();
+              ctx.arc(n.sx, n.sy, sz * 0.5, 0, 6.28);
+              ctx.fillStyle = `rgba(${stateColor},${0.6 + pulse * 0.15})`;
+              ctx.fill();
+              
+              // Core label
+              ctx.font = "700 10px 'IBM Plex Mono',monospace";
               ctx.textAlign = "center";
-              ctx.fillStyle = "rgba(255,200,200,.98)";
-              ctx.fillText(n.id, n.sx, n.sy + 1.5);
-            }
-            // risk score badge
-            if (n.score && n.scale > 0.72) {
-              const bw = 28,
-                bh = 13,
-                bx = n.sx - 14,
-                by = n.sy + sz + 5;
-              ctx.fillStyle = "rgba(239,68,68,.15)";
-              ctx.fillRect(bx, by, bw, bh);
-              ctx.strokeStyle = "rgba(239,68,68,.3)";
-              ctx.lineWidth = 0.6;
-              ctx.strokeRect(bx, by, bw, bh);
-              ctx.font = "700 8px 'IBM Plex Mono',monospace";
-              ctx.fillStyle = "#ef4444";
+              ctx.fillStyle = "rgba(255,255,255,.98)";
+              ctx.fillText("CORE", n.sx, n.sy + 3);
+              
+            } else {
+              // STATE NODES - clear and prominent
+              if (n.state === "confusion") stateColor = "239,68,68";
+              else if (n.state === "fatigue") stateColor = "245,158,11";
+              else if (n.state === "residue") stateColor = "234,179,8";
+              else if (n.state === "recovery") stateColor = "34,197,94";
+              
+              sz = n.r * Math.max(0.7, n.scale) * 1.6;
+              
+              // Outer pulse ring
+              ctx.beginPath();
+              ctx.arc(n.sx, n.sy, sz + 12 + pulse * 5, 0, 6.28);
+              ctx.strokeStyle = `rgba(${stateColor},${0.15 + pulse * 0.06})`;
+              ctx.lineWidth = 1.3;
+              ctx.stroke();
+              
+              // Main state circle
+              ctx.beginPath();
+              ctx.arc(n.sx, n.sy, sz, 0, 6.28);
+              ctx.fillStyle = `rgba(${stateColor},.22)`;
+              ctx.fill();
+              ctx.strokeStyle = `rgba(${stateColor},.9)`;
+              ctx.lineWidth = 2;
+              ctx.stroke();
+              
+              // Inner core
+              ctx.beginPath();
+              ctx.arc(n.sx, n.sy, sz * 0.45, 0, 6.28);
+              ctx.fillStyle = `rgba(${stateColor},${0.5 + pulse * 0.15})`;
+              ctx.fill();
+              
+              // State label - clear and readable
+              ctx.font = "700 9px 'IBM Plex Mono',monospace";
               ctx.textAlign = "center";
-              ctx.fillText(`${n.score}`, n.sx, by + 9.5);
+              ctx.fillStyle = n.state === "confusion" ? "rgba(255,220,220,.98)" : "rgba(200,255,220,.98)";
+              ctx.fillText(n.id, n.sx, n.sy + 2.5);
+              
+              // Intensity percentage below node
+              if (n.intensity && n.scale > 0.65) {
+                ctx.font = "600 8px 'IBM Plex Mono',monospace";
+                ctx.fillStyle = `rgba(${stateColor},.7)`;
+                ctx.fillText(`${n.intensity}%`, n.sx, n.sy + sz + 12);
+              }
             }
           } else {
+            // Signal trace particles - very subtle
+            const sz = n.r * Math.max(0.5, n.scale);
             ctx.beginPath();
             ctx.arc(n.sx, n.sy, sz, 0, 6.28);
-            ctx.fillStyle = `rgba(0,232,122,${0.04 + n.scale * 0.06})`;
+            ctx.fillStyle = `rgba(0,232,122,${0.05 + n.scale * 0.04})`;
             ctx.fill();
-            ctx.strokeStyle = `rgba(0,232,122,${0.12 + pulse * 0.06 + n.scale * 0.05})`;
-            ctx.lineWidth = 0.7;
+            ctx.strokeStyle = `rgba(0,232,122,${0.12 + pulse * 0.05})`;
+            ctx.lineWidth = 0.5;
             ctx.stroke();
           }
         });
@@ -892,7 +1063,7 @@ const HeroSection = () => {
                 </svg>
               ))}
 
-              <NetworkOrb />
+              <CognitiveField />
 
               {/* bottom fade */}
               <div
@@ -921,7 +1092,7 @@ const HeroSection = () => {
                 opacity: 0.55,
               }}
             >
-              PASSIVE SIGNAL GRAPH · FOCUS · CONFUSION · FATIGUE · RESIDUE
+              NEUROTRACE INFERENCE FIELD · STATE TRANSITIONS · PASSIVE SIGNAL FLOW
             </p>
           </div>
         </div>
