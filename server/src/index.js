@@ -1,12 +1,10 @@
 import express from "express";
 import cors from "cors";
-import dotenv from "dotenv";
 import http from "http";
 import { Server } from "socket.io";
+import "./config/env.js";
 import connectDB from "./config/db.js";
 import routes from "./routes/index.js";
-
-dotenv.config();
 
 // Connect to database
 connectDB();

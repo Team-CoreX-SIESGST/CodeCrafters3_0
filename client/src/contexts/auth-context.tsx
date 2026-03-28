@@ -58,6 +58,31 @@ type AuthContextType = {
 };
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
+const TOKEN_STORAGE_KEYS = ["token", "authToken"] as const;
+const USER_STORAGE_KEY = "user";
+
+function getStoredToken(): string | null {
+  if (typeof window === "undefined") return null;
+  for (const key of TOKEN_STORAGE_KEYS) {
+    const value = window.localStorage.getItem(key);
+    if (value && value.trim()) return value;
+  }
+  return null;
+}
+
+function storeToken(token: string): void {
+  if (typeof window === "undefined") return;
+  for (const key of TOKEN_STORAGE_KEYS) {
+    window.localStorage.setItem(key, token);
+  }
+}
+
+function clearStoredToken(): void {
+  if (typeof window === "undefined") return;
+  for (const key of TOKEN_STORAGE_KEYS) {
+    window.localStorage.removeItem(key);
+  }
+}
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
@@ -67,14 +92,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const handleAuthSuccess = useCallback(
     (loggedInUser: User | null | undefined, jwt: string | null | undefined) => {
+      if (!jwt || !jwt.trim()) {
+        toast.error("Login succeeded but no token was returned", {
+          description: "Please try again. The session could not be created.",
+        });
+        return;
+      }
       if (loggedInUser) {
-        localStorage.setItem("user", JSON.stringify(loggedInUser));
+        localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(loggedInUser));
         setUser(loggedInUser);
       }
-      if (jwt) {
-        localStorage.setItem("token", jwt);
-        setToken(jwt);
-      }
+      storeToken(jwt);
+      setToken(jwt);
       router.push("/chat");
     },
     [router],
@@ -99,9 +128,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         if (response.ok) {
           const loggedInUser = data?.data?.user || data?.user;
-          const jwt = data?.token || null;
+          const jwt = data?.data?.token || data?.token || data?.accessToken || null;
           handleAuthSuccess(loggedInUser, jwt);
-          return { success: true };
+          return jwt ? { success: true } : { success: false, error: "Missing auth token" };
         } else {
           toast.error("Login Failed", {
             description:
@@ -138,9 +167,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         if (response.ok) {
           const loggedInUser = data?.data?.user || data?.user;
-          const jwt = data?.token || null;
+          const jwt = data?.data?.token || data?.token || data?.accessToken || null;
           handleAuthSuccess(loggedInUser, jwt);
-          return { success: true };
+          return jwt ? { success: true } : { success: false, error: "Missing auth token" };
         }
 
         toast.error("Google Login Failed", {
@@ -164,8 +193,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   const logout = useCallback(() => {
-    localStorage.removeItem("user");
-    localStorage.removeItem("token");
+    localStorage.removeItem(USER_STORAGE_KEY);
+    clearStoredToken();
     setUser(null);
     setToken(null);
     router.push("/login");
@@ -175,8 +204,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Check if user is logged in on initial load
     const checkAuth = () => {
       try {
-        const userData = localStorage.getItem("user");
-        const storedToken = localStorage.getItem("token");
+        const userData = localStorage.getItem(USER_STORAGE_KEY);
+        const storedToken = getStoredToken();
         if (userData) {
           setUser(JSON.parse(userData));
         }

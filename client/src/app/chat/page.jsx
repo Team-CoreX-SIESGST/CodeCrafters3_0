@@ -18,6 +18,7 @@ import {
   X,
   BookOpen,
   MessageCircle,
+  Database,
 } from "lucide-react"
 import { SuggestionDropdown } from "@/components/ui/suggestion-dropdown"
 import { fuzzySearch } from "@/services/suggestions/fuzzy"
@@ -28,10 +29,10 @@ import { toast } from "sonner"
 import { TTSButton } from "@/components/ui/tts-button"
 import Link from "next/link"
 import { useAuth } from "@/contexts/auth-context"
-import { SERVER_URL_1, SERVER_URL } from "@/utils/commonHelper"
+import { SERVER_URL } from "@/utils/commonHelper"
+import PineconeChatPanel from "@/components/ui/PineconeChatPanel"
 
-// Call Luna backend (5001) and other services directly — no Next.js API proxy
-const LUNA_CHAT_BASE = `${SERVER_URL_1}/api/chat`
+const CHAT_API_BASE = `${SERVER_URL}/api/pinecone`
 const CHARTS_ENDPOINT = `${SERVER_URL}/api/gemini/charts`
 
 function normalizeImageResults(raw) {
@@ -274,7 +275,19 @@ const HeroBackdropCanvas = () => {
 }
 
 export default function ChatPage() {
-  const { user, token, logout } = useAuth()
+  const { user, token, logout, isLoading: authLoading } = useAuth()
+  const [storedToken, setStoredToken] = useState(null)
+
+  useEffect(() => {
+    if (typeof window === "undefined") return
+    const nextStoredToken =
+      window.localStorage.getItem("token") ||
+      window.localStorage.getItem("authToken") ||
+      null
+    setStoredToken(nextStoredToken)
+  }, [token, authLoading])
+
+  const authToken = token || storedToken || null
   const [messages, setMessages] = useState([])
   const [input, setInput] = useState("")
   const [isGenerating, setIsGenerating] = useState(false)
@@ -296,6 +309,7 @@ export default function ChatPage() {
   const [viewportHeight, setViewportHeight] = useState("100dvh")
   const [historyQuery, setHistoryQuery] = useState("")
   const [isFeedbackOpen, setIsFeedbackOpen] = useState(false)
+  const [isPineconeOpen, setIsPineconeOpen] = useState(false)
 
   const displayName = user?.username || user?.name || "User"
   const displayEmail = user?.email ?? ""
@@ -355,8 +369,9 @@ export default function ChatPage() {
   }, [])
 
   const normalizeConversationSummary = useCallback((conversation) => {
-    if (!conversation || typeof conversation !== "object" || !conversation.id) return null
-    const id = String(conversation.id)
+    const rawId = conversation.id ?? conversation._id
+    if (!conversation || typeof conversation !== "object" || !rawId) return null
+    const id = String(rawId)
     const rawTitle = conversation.title ?? conversation.name ?? ""
     const title = String(rawTitle).trim() || `Chat ${id.slice(0, 6) || id}`
     const updatedAt = conversation.updated_at ?? conversation.updatedAt ?? conversation.created_at ?? conversation.createdAt ?? null
@@ -365,9 +380,17 @@ export default function ChatPage() {
   }, [])
 
   const loadConversations = useCallback(async () => {
+    if (authLoading) return
+    if (!authToken) {
+      setConversations([])
+      setIsHistoryLoading(false)
+      return
+    }
     setIsHistoryLoading(true)
     try {
-      const response = await fetch(`${LUNA_CHAT_BASE}/conversations`)
+      const response = await fetch(`${CHAT_API_BASE}/conversations`, {
+        headers: { Authorization: `Bearer ${authToken}` },
+      })
       if (!response.ok) {
         const errorText = await response.text()
         throw new Error(errorText || "Failed to load conversations")
@@ -384,7 +407,7 @@ export default function ChatPage() {
     } finally {
       setIsHistoryLoading(false)
     }
-  }, [normalizeConversationSummary, token])
+  }, [authLoading, authToken, normalizeConversationSummary])
 
   useEffect(() => { loadConversations() }, [loadConversations])
   useEffect(() => { if (!currentConversationId) return; loadConversations() }, [currentConversationId, loadConversations])
@@ -421,7 +444,7 @@ export default function ChatPage() {
     const createdAtIso = message?.created_at ?? message?.createdAt
     const normalizedVideos = normalizeVideoResults(message?.videos ?? message?.youtubeResults)
     return {
-      id: message?.id ? String(message.id) : crypto.randomUUID(),
+      id: message?.id ? String(message.id) : message?._id ? String(message._id) : crypto.randomUUID(),
       role: role === "assistant" || role === "user" || role === "system" ? role : "assistant",
       content: message?.content ?? "",
       createdAt: createdAtIso ? new Date(createdAtIso) : undefined,
@@ -454,8 +477,15 @@ export default function ChatPage() {
     setLoadingConversationId(conversationId)
     setIsHistoryOpen(false)
     setIsProfileOpen(false)
+    if (!authToken) {
+      toast("Please log in again to load this conversation")
+      setLoadingConversationId(null)
+      return
+    }
     try {
-      const response = await fetch(`${LUNA_CHAT_BASE}/conversations/${conversationId}`)
+      const response = await fetch(`${CHAT_API_BASE}/conversations/${conversationId}`, {
+        headers: { Authorization: `Bearer ${authToken}` },
+      })
       if (!response.ok) {
         const errorText = await response.text()
         throw new Error(errorText || "Failed to load conversation")
@@ -472,13 +502,20 @@ export default function ChatPage() {
     } finally {
       setLoadingConversationId(null)
     }
-  }, [attachPromptTitlesToHistory, normalizeMessageFromHistory, stop, token])
+  }, [attachPromptTitlesToHistory, authToken, normalizeMessageFromHistory, stop])
 
   const handleDeleteConversation = useCallback(async (conversationId, event) => {
     event?.preventDefault()
     event?.stopPropagation()
+    if (!authToken) {
+      toast("Please log in again to delete this conversation")
+      return
+    }
     try {
-      const response = await fetch(`${LUNA_CHAT_BASE}/conversations/${conversationId}`, { method: "DELETE" })
+      const response = await fetch(`${CHAT_API_BASE}/conversations/${conversationId}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${authToken}` },
+      })
       if (!response.ok) {
         const errorText = await response.text()
         throw new Error(errorText || "Failed to delete conversation")
@@ -489,7 +526,7 @@ export default function ChatPage() {
       console.error("Failed to delete conversation:", error)
       toast("Failed to delete conversation")
     }
-  }, [currentConversationId, startNewChat, token])
+  }, [authToken, currentConversationId, startNewChat])
 
   const filteredSuggestions = useMemo(() => {
     if (!input || input.trim().length < 2) return []
@@ -518,6 +555,10 @@ export default function ChatPage() {
 
   const simulateAssistant = async (userContent, attachments) => {
     try {
+      if (!authToken) {
+        toast.error("Your session token is missing. Please log in again.")
+        return
+      }
       const conversationId = currentConversationId
       abortControllerRef.current = new AbortController()
 
@@ -527,30 +568,27 @@ export default function ChatPage() {
 
       let response
       if (attachments && attachments.length > 0) {
-        const formData = new FormData()
-        formData.append("prompt", userContent)
-        formData.append("options", JSON.stringify({ includeYouTube, includeImageSearch }))
-        Array.from(attachments).forEach((file) => formData.append("files", file, file.name))
-        response = await fetch(`${LUNA_CHAT_BASE}/stream`, {
-          method: "POST",
-          body: formData,
-          signal: abortControllerRef.current.signal,
-        })
-      } else {
-        response = await fetch(`${LUNA_CHAT_BASE}/stream`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ prompt: userContent, options: { includeYouTube, includeImageSearch } }),
-          signal: abortControllerRef.current.signal,
-        })
+        toast("Attachments are not supported in the current chat backend yet. Sending text only.")
       }
+      response = await fetch(`${CHAT_API_BASE}/chat`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${authToken}`,
+        },
+        body: JSON.stringify({
+          query: userContent,
+          conversationId: conversationId || undefined,
+        }),
+        signal: abortControllerRef.current.signal,
+      })
 
       const classifySample = async (sample, mid) => {
         if (!mid || !sample || typeof sample !== "object") return
         try {
           const res = await fetch(`${"http://localhost:8000"}/classify`, {
             method: "POST",
-            headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+            headers: { "Content-Type": "application/json", ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}) },
             body: JSON.stringify({ sample }),
           })
           const classificationResponse = res.ok ? await res.json() : { error: res.statusText || "Classification failed" }
@@ -700,7 +738,7 @@ export default function ChatPage() {
         try {
           const chartsResponse = await fetch(CHARTS_ENDPOINT, {
             method: "POST",
-            headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+            headers: { "Content-Type": "application/json", ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}) },
             body: JSON.stringify({ prompt: userContent, conversationId: chartsConversationId, options: { includeSearch: true, includeYouTube } }),
           })
           if (chartsResponse.ok) {
@@ -1353,6 +1391,17 @@ export default function ChatPage() {
               <button type="button" className="hud-btn" onClick={() => setIsFeedbackOpen(true)}>
                 <MessageCircle style={{ width: 13, height: 13 }} /> Feedback
               </button>
+
+              {/* Knowledge Bot — Pinecone RAG */}
+              <button
+                id="pinecone-panel-toggle"
+                type="button"
+                className="hud-btn"
+                onClick={() => setIsPineconeOpen((v) => !v)}
+                style={isPineconeOpen ? { background: "rgba(139,92,246,0.18)", borderColor: "rgba(139,92,246,0.4)", color: "#c4b5fd" } : {}}
+              >
+                <Database style={{ width: 13, height: 13 }} /> Knowledge Bot
+              </button>
             </div>
 
             {/* Desktop right: profile / auth */}
@@ -1561,6 +1610,11 @@ export default function ChatPage() {
           userEmail={displayEmail}
           userId={user ? user.email : null}
         />
+
+        {/* Pinecone RAG Chat Panel */}
+        {isPineconeOpen && (
+          <PineconeChatPanel onClose={() => setIsPineconeOpen(false)} />
+        )}
       </div>
     </>
   )

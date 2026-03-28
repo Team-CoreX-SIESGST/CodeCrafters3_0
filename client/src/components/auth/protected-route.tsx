@@ -8,18 +8,18 @@ import { useAuth } from '@/contexts/auth-context';
 
 export default function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const router = useRouter();
-  const { user, isLoading: authLoading } = useAuth();
+  const { user, token, isLoading: authLoading } = useAuth();
   const [isChecking, setIsChecking] = useState(true);
 
   useEffect(() => {
     if (authLoading) return;
 
-    if (!user) {
+    if (!user || !token) {
       router.replace('/login');
     } else {
       setIsChecking(false);
     }
-  }, [authLoading, user, router]);
+  }, [authLoading, user, token, router]);
 
   if (authLoading || isChecking) {
     return (
