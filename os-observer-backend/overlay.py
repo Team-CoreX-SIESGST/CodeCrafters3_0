@@ -28,6 +28,11 @@ STATE_STYLES: dict[str, dict[str, str]] = {
         "bg":    "#071a10", "accent": "#22c55e",
         "bar":   "#14532d", "text":   "#f0fdf4", "sub":    "#86efac",
     },
+    "ideal": {
+        "badge": "IDEAL",
+        "bg":    "#0d1a2d", "accent": "#38bdf8",
+        "bar":   "#0c4a6e", "text":   "#f0f9ff", "sub":    "#7dd3fc",
+    },
     "focused": {
         "badge": "FOCUSED",
         "bg":    "#0d2118", "accent": "#4ade80",
@@ -52,6 +57,11 @@ STATE_STYLES: dict[str, dict[str, str]] = {
         "badge": "FATIGUED",
         "bg":    "#2d0a10", "accent": "#f87171",
         "bar":   "#7f1d1d", "text":   "#fff1f2", "sub":    "#fca5a5",
+    },
+    "user_not_present": {
+        "badge": "USER NOT PRESENT",
+        "bg":    "#1f2937", "accent": "#94a3b8",
+        "bar":   "#334155", "text":   "#f8fafc", "sub":    "#cbd5e1",
     },
     "steady": {
         "badge": "FOCUSED",
@@ -710,11 +720,13 @@ def _state_title(state: str) -> str:
     return {
         "calibrating":         "Calibrating your personal baseline…",
         "deep_focus":          "Interaction pattern: deep focus — do not disturb.",
+        "ideal":               "Interaction pattern: no recent input detected.",
         "focused":             "Interaction pattern: focused work.",
         "confused":            "Interaction pattern: confusion or exploration.",
         "productive_struggle": "Interaction pattern: productive struggle — learning in progress.",
         "harmful_confusion":   "Interaction pattern: harmful confusion — break suggested.",
         "fatigued":            "Interaction pattern: fatigue detected — rest recommended.",
+        "user_not_present":    "Interaction pattern: user not present.",
         "steady":              "Interaction pattern: focused work.",
     }.get(state, "Observing…")
 

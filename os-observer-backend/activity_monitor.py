@@ -1231,13 +1231,10 @@ class ActivityMonitor:
             # SCREEN ALERT UPDATE
             # ══════════════════════════════════════════════════════════════
             state_label = _state_label(
-                attention_residue = attention_residue,
-                focus_depth      = focus_depth,
-                confusion_risk   = confusion_risk,
-                fatigue_risk     = fatigue_risk,
                 classifier_state = classification.state,
-                perclos          = perclos_f,
-                ml_state         = ml_state,
+                keyboard         = keyboard,
+                camera           = camera,
+                idle_seconds     = idle_seconds,
             )
 
             # ── Store artifact friction ───────────────────────────────────
@@ -1676,34 +1673,31 @@ def _compute_idle_ratio(now, activity_timestamps, window_seconds):
         idle_time += tail
     return round(clamp(idle_time / window_seconds), 3)
 
-def _state_label(*, attention_residue, focus_depth, confusion_risk, fatigue_risk, classifier_state, perclos, ml_state=None):
-    ml_cognitive = ""
-    ml_struggle = ""
-    ml_friction = 0.0
-    if isinstance(ml_state, dict):
-        ml_cognitive = str(ml_state.get("cognitive_state", "")).lower()
-        ml_struggle = str(ml_state.get("struggle_type", "")).lower()
-        ml_friction = clamp(float(ml_state.get("confusion_friction", 0.0)))
+def _state_label(*, classifier_state, keyboard, camera, idle_seconds):
+    camera_status = str(camera.get("status", "disabled")).lower()
+    face_detected = bool(camera.get("face_detected", False))
+    camera_available = camera_status not in {"disabled", "unavailable"}
+    blink_rate = float(camera.get("blink_rate_per_min", 0.0) or 0.0)
+    rigorous_head_movement = bool(camera.get("rigorous_head_movement", False))
+    recent_backspaces = int(keyboard.get("recent_backspace_count_5s", 0) or 0)
+    recent_printable = int(keyboard.get("recent_printable_count_5s", 0) or 0)
 
-    if classifier_state == "calibrating" and not ml_cognitive:
-        return "calibrating"
-    if perclos >= 0.18 or classifier_state == "fatigued" or ml_cognitive == "fatigued" or fatigue_risk >= 0.68:
-        return "fatigued"
-    if classifier_state == "confused" or ml_cognitive == "confused":
-        if ml_struggle == "harmful" or ml_friction >= 0.62 or confusion_risk >= 0.62:
-            return "harmful_confusion"
-        if ml_struggle == "productive" or confusion_risk >= 0.42:
-            return "productive_struggle"
+    if idle_seconds > 10:
+        if camera_available and not face_detected:
+            return "user_not_present"
+        return "deep_focus"
+
+    if idle_seconds > 5:
+        return "ideal"
+
+    if recent_backspaces > recent_printable:
         return "confused"
-    if classifier_state == "focused" or ml_cognitive == "focused":
-        if focus_depth >= 0.72 and attention_residue <= 0.32 and fatigue_risk <= 0.40:
-            return "deep_focus"
-        if focus_depth >= 0.55:
-            return "focused"
-    if confusion_risk >= 0.62:
-        return "harmful_confusion"
-    if confusion_risk >= 0.42:
-        return "productive_struggle"
+
+    if camera_available and (blink_rate > 30 or rigorous_head_movement):
+        return "fatigued"
+
+    if classifier_state == "confused":
+        return "confused"
     return "focused"
 
 def _current_goal(active_app, active_window):
@@ -1728,7 +1722,11 @@ def _camera_disabled_snapshot():
         "ear_mean": None,
         "closed_threshold": None, "sample_count": 0,
         "blink_rate_per_min": 0.0, "blink_rate_class": "no_data",
-        "low_blink_rate": False, "expression": "neutral",
+        "low_blink_rate": False,
+        "head_movement_intensity": 0.0,
+        "head_movement_class": "no_data",
+        "rigorous_head_movement": False,
+        "expression": "neutral",
     }
 
 def time_modifier(now):

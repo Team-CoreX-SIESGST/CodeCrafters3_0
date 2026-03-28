@@ -1,0 +1,107 @@
+{
+  "version": 1,
+  "calibration_seconds": 90.0,
+  "minimum_samples": 20,
+  "started_at": 1774718500.9161794,
+  "baseline_ready": true,
+  "calibration_stats": {
+    "iki_mean": {
+      "count": 4130,
+      "mean": 0.2509142857142859,
+      "m2": 1295.3180916571453
+    },
+    "iki_std": {
+      "count": 4130,
+      "mean": 0.4501278450363212,
+      "m2": 4176.916552497831
+    },
+    "error_rate": {
+      "count": 4130,
+      "mean": 0.09895302663438263,
+      "m2": 200.71950288716678
+    },
+    "burst_length": {
+      "count": 4130,
+      "mean": 14.272757869249372,
+      "m2": 4375537.457287857
+    },
+    "cursor_speed": {
+      "count": 4130,
+      "mean": 258.74049152542403,
+      "m2": 813068955.8065013
+    },
+    "path_linearity": {
+      "count": 4130,
+      "mean": 0.1502600484261499,
+      "m2": 164.14200470799045
+    },
+    "click_dwell": {
+      "count": 4130,
+      "mean": 0.476261985472157,
+      "m2": 3567.1665905317222
+    },
+    "idle_ratio": {
+      "count": 4130,
+      "mean": 0.5955990314770004,
+      "m2": 423.95765799612485
+    }
+  },
+  "ewma_stats": {
+    "iki_mean": {
+      "alpha": 0.05,
+      "mean": 0.03454130384237153,
+      "var": 0.006866155249096538,
+      "initialised": true
+    },
+    "iki_std": {
+      "alpha": 0.05,
+      "mean": 0.0235228104576765,
+      "var": 0.004438714245739024,
+      "initialised": true
+    },
+    "error_rate": {
+      "alpha": 0.05,
+      "mean": 0.0004592904029371956,
+      "var": 0.00022349993409434053,
+      "initialised": true
+    },
+    "burst_length": {
+      "alpha": 0.05,
+      "mean": 0.8393005173427402,
+      "var": 4.4054664118950155,
+      "initialised": true
+    },
+    "cursor_speed": {
+      "alpha": 0.05,
+      "mean": 165.8159478708117,
+      "var": 2342.4423178944116,
+      "initialised": true
+    },
+    "path_linearity": {
+      "alpha": 0.05,
+      "mean": 0.10175945406016779,
+      "var": 0.007183775426080907,
+      "initialised": true
+    },
+    "click_dwell": {
+      "alpha": 0.05,
+      "mean": 0.5822216278057296,
+      "var": 0.025368883864510777,
+      "initialised": true
+    },
+    "idle_ratio": {
+      "alpha": 0.05,
+      "mean": 0.4740938953329264,
+      "var": 0.00594758129586945,
+      "initialised": true
+    }
+  },
+  "ewma_ready": true,
+  "state_buffer": [
+    "focused",
+    "focused",
+    "focused",
+    "focused",
+    "focused"
+  ]
+}

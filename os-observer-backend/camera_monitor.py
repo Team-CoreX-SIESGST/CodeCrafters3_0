@@ -32,6 +32,7 @@ from collections import deque
 from typing import Deque, Optional
 
 
+NOSE_TIP      = 1
 LEFT_EYE      = (33, 160, 158, 133, 153, 144)
 RIGHT_EYE     = (362, 385, 387, 263, 373, 380)
 MOUTH_CORNERS = (61, 291)
@@ -46,10 +47,12 @@ EAR_OPEN_RATIO         = 0.76
 MIN_BLINK_FRAMES       = 2
 MAX_BLINK_FRAMES       = 14
 BLINK_ROLLING_WINDOW_S = 60.0
+HEAD_MOVEMENT_WINDOW_S = 5.0
 
 BROW_FURROW_RATIO = 0.88
 BROW_RAISE_RATIO  = 1.14
 EAR_SQUINT_RATIO  = 0.85
+RIGOROUS_HEAD_MOVEMENT_THRESHOLD = 0.12
 
 
 def clamp(value: float, lo: float = 0.0, hi: float = 1.0) -> float:
@@ -71,6 +74,7 @@ class CameraMonitor:
         self._samples: Deque[tuple[float, float]] = deque()
         self._ear_samples: Deque[tuple[float, float]] = deque()
         self._baseline_ears: Deque[float] = deque(maxlen=120)
+        self._face_centers: Deque[tuple[float, float, float]] = deque()
 
         self._blink_state = "open"
         self._blink_frames = 0
@@ -117,6 +121,8 @@ class CameraMonitor:
             elapsed_min = min(BLINK_ROLLING_WINDOW_S, now - (blink_window[0] if blink_window else now)) / 60.0
             blink_rate = len(blink_window) / max(elapsed_min, 1 / 60) if blink_window else 0.0
             low_blink = self._face_detected and blink_rate < 8 and len(blink_window) > 0
+            head_motion = self._head_movement_intensity()
+            rigorous_head_movement = self._face_detected and head_motion > RIGOROUS_HEAD_MOVEMENT_THRESHOLD
 
             return {
                 "perclos": round(perclos, 3) if perclos is not None else None,
@@ -133,6 +139,9 @@ class CameraMonitor:
                 "blink_count_60s": len(blink_window),
                 "low_blink_rate": low_blink,
                 "blink_rate_class": _classify_blink_rate(blink_rate, self._face_detected),
+                "head_movement_intensity": round(head_motion, 3),
+                "head_movement_class": _classify_head_movement(head_motion, self._face_detected),
+                "rigorous_head_movement": rigorous_head_movement,
                 "expression": self._expression,
             }
 
@@ -186,6 +195,7 @@ class CameraMonitor:
                     continue
 
                 ear = self._average_ear(lm)
+                self._record_face_center(now, lm)
                 self._baseline_ears.append(ear)
                 threshold = self._closed_threshold_from_baseline()
                 is_closed = float(ear < threshold)
@@ -272,15 +282,40 @@ class CameraMonitor:
             self._expression = "neutral"
             self._prune_all(now)
 
+    def _record_face_center(self, now: float, lm) -> None:
+        try:
+            nose = lm[NOSE_TIP]
+        except (IndexError, TypeError):
+            return
+        with self._lock:
+            self._face_centers.append((now, float(nose.x), float(nose.y)))
+            self._prune_all(now)
+
     def _prune_all(self, now: float) -> None:
         cutoff = now - self.window_seconds
         while self._samples and self._samples[0][0] < cutoff:
             self._samples.popleft()
         while self._ear_samples and self._ear_samples[0][0] < cutoff:
             self._ear_samples.popleft()
+        head_cutoff = now - HEAD_MOVEMENT_WINDOW_S
+        while self._face_centers and self._face_centers[0][0] < head_cutoff:
+            self._face_centers.popleft()
         blink_cutoff = now - BLINK_ROLLING_WINDOW_S
         while self._blink_events and self._blink_events[0] < blink_cutoff:
             self._blink_events.popleft()
+
+    def _head_movement_intensity(self) -> float:
+        if len(self._face_centers) < 2:
+            return 0.0
+        total_motion = 0.0
+        start_ts = self._face_centers[0][0]
+        end_ts = self._face_centers[-1][0]
+        previous = self._face_centers[0]
+        for current in list(self._face_centers)[1:]:
+            total_motion += math.hypot(current[1] - previous[1], current[2] - previous[2])
+            previous = current
+        elapsed = max(end_ts - start_ts, 1e-3)
+        return total_motion / elapsed
 
     def _closed_threshold_from_baseline(self) -> float:
         if not self._baseline_ears:
@@ -348,3 +383,13 @@ def _classify_blink_rate(blink_rate: float, face_detected: bool) -> str:
     if 12 <= blink_rate <= 20:
         return "normal"
     return "moderate"
+
+
+def _classify_head_movement(head_motion: float, face_detected: bool) -> str:
+    if not face_detected:
+        return "no_data"
+    if head_motion > RIGOROUS_HEAD_MOVEMENT_THRESHOLD:
+        return "rigorous"
+    if head_motion > RIGOROUS_HEAD_MOVEMENT_THRESHOLD * 0.55:
+        return "active"
+    return "steady"
