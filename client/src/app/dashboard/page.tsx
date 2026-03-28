@@ -1,324 +1,614 @@
-"use client";
+'use client';
 
+import { type ReactNode, useEffect, useState } from "react";
 import {
   Activity,
   AlertTriangle,
   Brain,
-  Clock3,
-  GitBranch,
-  Layers,
+  Database,
+  Network,
   RefreshCw,
-  Sparkles,
-  TrendingUp,
-  TriangleAlert,
+  Server,
+  TimerReset,
   Zap,
+  TrendingUp,
+  Eye,
+  Cpu,
 } from "lucide-react";
-import type { LucideIcon } from "lucide-react";
-import {
-  startTransition,
-  useCallback,
-  useEffect,
-  useMemo,
-  useState,
-  type ReactNode,
-} from "react";
 import Navbar from "@/components/Navbar";
-import { cn } from "@/lib/utils";
+import AnalyticsNodeGraph from "@/components/dashboard/AnalyticsNodeGraph";
 import { SERVER_URL } from "@/utils/commonHelper";
 
-type StateDistribution = { label: string; count: number; percentage: number };
-type ScoreAverage = { key: string; label: string; value: number };
-type TimelinePoint = { timestamp: string | null; stateLabel: string; focusDepth: number; confusionRisk: number; fatigueRisk: number; interruptibility: number };
-type Hotspot = { artifactId: string; artifactLabel: string; frictionScore: number; visits: number; revisits: number; createdAt: string | null };
-type DashboardEvent = { id: string; timestamp: string; createdAt: string | null; message: string };
-type ConfusionEpisode = { episodeId: string; status: string; peakConfusion: number; durationS: number | null; activeApp: string; startedAt: string | null };
-type StateTransition = { from: string; to: string; count: number };
-type AppBreakdown = { app: string; count: number; share: number; avgFocus: number; avgConfusion: number; avgFatigue: number };
-type ExtremePoint = { timestamp: string | null; stateLabel: string; focusDepth: number; confusionRisk: number; fatigueRisk: number; interruptibility: number };
+const DASHBOARD_URL = `${SERVER_URL}/api/cognitive/dashboard`;
+
+/* ── minimal types ──────────────────────────────────────────────────────── */
+type ScoreAvg = { key: string; label: string; value: number };
+type TimelinePoint = {
+  timestamp: string | null;
+  stateLabel: string;
+  focusDepth: number;
+  confusionRisk: number;
+  fatigueRisk: number;
+  interruptibility: number;
+};
+type StatePoint = { label: string; count: number; percentage: number };
+type Transition = { from: string; to: string; count: number };
+type AppEntry = { app: string; count: number; share: number; avgFocus: number; avgConfusion: number; avgFatigue: number };
+type HotSpot = { artifactId: string; artifactLabel: string; frictionScore: number; visits: number; revisits: number };
+type GraphNode = { id: string; label: string; type: string; source?: string; degree?: number };
+type GraphLink = { source: string; target: string; label: string; sourceKind?: string };
+
 type DashboardPayload = {
   ok: boolean;
   generatedAt: string;
-  source: { mongoConnected: boolean; liveConnected: boolean; liveError: string | null };
+  source: { mongoConnected: boolean; analyticsSource: string; analyticsUserId: string | null };
   summary: {
-    snapshotCount: number; latestGeneratedAt: string | null; latestState: string; topState: string;
-    avgFocusDepth: number; avgConfusionRisk: number; avgFatigueRisk: number; avgInterruptibility: number;
-    deepFocusRate: number; harmfulConfusionRate: number; fatigueRate: number;
+    snapshotCount: number;
+    latestState: string;
+    topState: string;
+    avgFocusDepth: number;
+    avgConfusionRisk: number;
+    avgFatigueRisk: number;
+    avgInterruptibility: number;
+    deepFocusRate: number;
+    harmfulConfusionRate: number;
+    fatigueRate: number;
+  };
+  live: {
+    current: {
+      stateLabel?: string;
+      confidence?: number;
+      activeApp?: string;
+      scores?: Record<string, number>;
+      onnx?: { ready?: boolean; predicted_state?: string; confusion_prob?: number; fatigue_prob?: number } | null;
+    } | null;
+    graph: { nodes: GraphNode[]; links: GraphLink[]; stats: { nodeCount: number; relationCount: number; nodeTypes: Record<string, number>; dbNodeCount?: number; dbRelationCount?: number } };
   };
   analytics: {
-    stateDistribution: StateDistribution[]; scoreAverages: ScoreAverage[]; scoreTimeline: TimelinePoint[];
-    stateTransitions: StateTransition[]; appBreakdown: AppBreakdown[];
-    scoreExtremes: { highestFocus: ExtremePoint | null; highestConfusion: ExtremePoint | null; highestFatigue: ExtremePoint | null; highestInterruptibility: ExtremePoint | null };
+    scoreAverages: ScoreAvg[];
+    scoreTimeline: TimelinePoint[];
+    stateDistribution: StatePoint[];
+    stateTransitions: Transition[];
+    appBreakdown: AppEntry[];
+    scoreExtremes: { highestFocus: TimelinePoint | null; highestConfusion: TimelinePoint | null; highestFatigue: TimelinePoint | null };
     alertTotals: { attentionResidue: number; preError: number; fatigue: number; confusionEpisodes: number; handoffCapsules: number };
-    frictionHotspots: Hotspot[]; recentEvents: DashboardEvent[]; confusionEpisodes: ConfusionEpisode[]; insights: string[];
+    frictionHotspots: HotSpot[];
   };
 };
 
-const DASHBOARD_URL = `${SERVER_URL}/api/cognitive/dashboard`;
-const STATE_COLORS: Record<string, string> = { deep_focus: "#34b27b", focused: "#4ade80", steady: "#6aa9ff", productive_struggle: "#ffb347", confused: "#f59e0b", harmful_confusion: "#ff8a4c", fatigued: "#e54b4f", calibrating: "#8c5cff", unknown: "#94a3b8" };
-const SERIES = [
-  { key: "focusDepth", label: "Focus", color: "#34b27b" },
-  { key: "confusionRisk", label: "Confusion", color: "#ffb347" },
-  { key: "fatigueRisk", label: "Fatigue", color: "#e54b4f" },
-  { key: "interruptibility", label: "Interruptibility", color: "#6aa9ff" },
-] as const;
+/* ── helpers ─────────────────────────────────────────────────────────────── */
+const pct = (v?: number | null) => `${Math.round((Number(v) || 0) * 100)}%`;
+const pretty = (v?: string | null) => (v || "—").replace(/_/g, " ");
+const clr = (v: number) => v >= 0.65 ? "#34b27b" : v >= 0.4 ? "#f59e0b" : "#ef4444";
+const focusClr = (v: number) => v >= 0.65 ? "#34b27b" : v >= 0.4 ? "#f59e0b" : "#6aa9ff";
 
-const humanize = (v: string) => v.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
-const pct = (v: number) => `${Math.round(v * 100)}%`;
-const formatDateTime = (v: string | null) => !v || Number.isNaN(new Date(v).getTime()) ? "—" : new Date(v).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
-const formatCompact = (v: string | null) => !v || Number.isNaN(new Date(v).getTime()) ? "—" : new Date(v).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-const linePath = (vals: number[], w: number, h: number) => !vals.length ? `M0 ${h / 2} L${w} ${h / 2}` : vals.map((v, i) => `${i === 0 ? "M" : "L"} ${((i / Math.max(vals.length - 1, 1)) * w).toFixed(1)} ${(h - Math.max(0, Math.min(1, v)) * h).toFixed(1)}`).join(" ");
-const areaPath = (vals: number[], w: number, h: number) => !vals.length ? "" : `${linePath(vals, w, h)} L${w} ${h} L0 ${h} Z`;
+const STATE_PALETTE = ["#34b27b","#6aa9ff","#f59e0b","#ef4444","#22d3ee","#a78bfa","#fb7185","#fbbf24"];
 
-function Card({ title, subtitle, children, className = "" }: { title: string; subtitle?: string; children: ReactNode; className?: string }) {
+/* ── tiny sub-components ─────────────────────────────────────────────────── */
+function Panel({ eyebrow, title, children, aside }: { eyebrow: string; title: string; children: ReactNode; aside?: string }) {
   return (
-    <section className={cn("glass-card relative overflow-hidden border-border/70 bg-card/72", className)}>
-      <div className="pointer-events-none absolute inset-x-0 top-0 h-px" style={{ background: "linear-gradient(90deg, transparent, rgba(var(--primary-rgb), 0.75), transparent)" }} />
-      <p className="pill-badge mb-3">Analytics</p>
-      <h2 className="font-serif text-2xl text-foreground">{title}</h2>
-      {subtitle ? <p className="mt-2 text-sm leading-6 text-muted-foreground">{subtitle}</p> : null}
-      <div className="mt-6">{children}</div>
+    <section className="relative overflow-hidden rounded-[2rem] border border-white/10 bg-[#08111a]/90 p-5 shadow-[0_30px_80px_rgba(0,0,0,0.35)]">
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(52,178,123,0.1),transparent_35%),radial-gradient(circle_at_left,rgba(106,169,255,0.08),transparent_30%)]" />
+      <div className="relative flex items-start justify-between gap-4 mb-5">
+        <div>
+          <div className="font-mono text-[10px] uppercase tracking-[0.34em] text-emerald-300/70">{eyebrow}</div>
+          <h2 className="mt-1.5 text-lg font-semibold text-white">{title}</h2>
+        </div>
+        {aside && <div className="text-xs text-slate-400 font-mono">{aside}</div>}
+      </div>
+      <div className="relative">{children}</div>
     </section>
   );
 }
 
-function Metric({ label, value, helper, icon: Icon, color }: { label: string; value: string; helper: string; icon: LucideIcon; color: string }) {
+function KpiCard({ icon, label, value, sub, color = "#34b27b" }: { icon: ReactNode; label: string; value: string; sub?: string; color?: string }) {
   return (
-    <div className="glass-card relative overflow-hidden border-border/60 bg-card/65 px-5 py-5">
-      <div className="absolute inset-x-0 top-0 h-1" style={{ background: color }} />
-      <div className="mb-4 flex items-center justify-between">
-        <span className="stat-chip">{label}</span>
-        <div className="flex h-10 w-10 items-center justify-center rounded-full" style={{ background: `${color}1f`, color }}>
-          <Icon className="h-5 w-5" />
-        </div>
+    <div className="rounded-[1.6rem] border border-white/10 bg-white/[0.04] p-4 shadow-[0_20px_60px_rgba(0,0,0,0.25)]">
+      <div className="mb-3 flex items-center justify-between">
+        <span className="rounded-full border p-2" style={{ borderColor: `${color}40`, background: `${color}18`, color }}>{icon}</span>
+        <span className="font-mono text-[10px] uppercase tracking-[0.28em] text-slate-500">{label}</span>
       </div>
-      <p className="font-serif text-3xl text-foreground">{value}</p>
-      <p className="mt-2 text-sm leading-6 text-muted-foreground">{helper}</p>
+      <div className="text-2xl font-semibold text-white">{value}</div>
+      {sub && <div className="mt-1 text-xs text-slate-400">{sub}</div>}
     </div>
   );
 }
 
-function Bar({ label, value, color, note }: { label: string; value: number; color: string; note?: string }) {
+function HBar({ value, max = 1, color = "#34b27b", height = "h-2" }: { value: number; max?: number; color?: string; height?: string }) {
+  const w = Math.max(3, Math.min(100, (value / max) * 100));
+  return (
+    <div className={`${height} w-full rounded-full bg-white/6 overflow-hidden`}>
+      <div className={`${height} rounded-full transition-all duration-700`} style={{ width: `${w}%`, background: color }} />
+    </div>
+  );
+}
+
+/* ── Score averages radar-style bars ─────────────────────────────────────── */
+function ScoreAverageBars({ averages }: { averages: ScoreAvg[] }) {
+  const SCORE_COLORS: Record<string, string> = {
+    focus_depth:        "#34b27b",
+    attention_residue:  "#fbbf24",
+    pre_error_risk:     "#f87171",
+    confusion_risk:     "#ef4444",
+    fatigue_risk:       "#f59e0b",
+    interruptibility:   "#6aa9ff",
+  };
+  return (
+    <div className="space-y-4">
+      {averages.map((s) => (
+        <div key={s.key}>
+          <div className="mb-1.5 flex items-center justify-between text-sm">
+            <span className="text-slate-300">{s.label}</span>
+            <span className="font-mono font-semibold" style={{ color: SCORE_COLORS[s.key] || "#94a3b8" }}>{pct(s.value)}</span>
+          </div>
+          <HBar value={s.value} color={SCORE_COLORS[s.key] || "#94a3b8"} />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/* ── State distribution bars ─────────────────────────────────────────────── */
+function StateDistBars({ distribution }: { distribution: StatePoint[] }) {
+  return (
+    <div className="space-y-3">
+      {distribution.slice(0, 7).map((s, i) => (
+        <div key={s.label}>
+          <div className="mb-1 flex items-center justify-between text-sm">
+            <span className="text-slate-300 capitalize">{pretty(s.label)}</span>
+            <span className="font-mono text-xs" style={{ color: STATE_PALETTE[i % STATE_PALETTE.length] }}>{s.percentage}% <span className="text-slate-500">({s.count})</span></span>
+          </div>
+          <HBar value={s.percentage} max={100} color={STATE_PALETTE[i % STATE_PALETTE.length]} />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/* ── State transition matrix ─────────────────────────────────────────────── */
+function TransitionTable({ transitions }: { transitions: Transition[] }) {
+  const maxCount = Math.max(...transitions.map((t) => t.count), 1);
   return (
     <div className="space-y-2">
-      <div className="flex items-center justify-between gap-3">
-        <div><p className="text-sm font-medium text-foreground">{label}</p>{note ? <p className="text-xs text-muted-foreground">{note}</p> : null}</div>
-        <span className="font-mono text-xs uppercase tracking-[0.2em]" style={{ color }}>{pct(value)}</span>
+      {transitions.slice(0, 8).map((t, i) => (
+        <div key={`${t.from}-${t.to}-${i}`} className="flex items-center gap-3">
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 text-xs mb-1">
+              <span className="text-emerald-300/80 font-mono truncate">{pretty(t.from)}</span>
+              <span className="text-slate-500">→</span>
+              <span className="text-sky-300/80 font-mono truncate">{pretty(t.to)}</span>
+            </div>
+            <HBar value={t.count} max={maxCount} color="#6aa9ff" height="h-1.5" />
+          </div>
+          <span className="text-white font-semibold text-sm w-6 text-right shrink-0">{t.count}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/* ── Animated SVG signal line chart ─────────────────────────────────────── */
+const SIGNALS = [
+  { field: "focusDepth"       as const, label: "Focus",           stroke: "#34b27b", fill: "url(#g-focus)"   , id: "g-focus"    },
+  { field: "confusionRisk"    as const, label: "Confusion",        stroke: "#ef4444", fill: "url(#g-conf)"    , id: "g-conf"     },
+  { field: "fatigueRisk"      as const, label: "Fatigue",           stroke: "#f59e0b", fill: "url(#g-fat)"     , id: "g-fat"      },
+  { field: "interruptibility" as const, label: "Interruptibility",  stroke: "#a78bfa", fill: "url(#g-inter)"   , id: "g-inter"    },
+] as const;
+
+function SignalTimeline({ timeline }: { timeline: TimelinePoint[] }) {
+  const [drawn, setDrawn] = useState(false);
+  const W = 900, H = 260, PAD = { top: 18, right: 18, bottom: 28, left: 36 };
+  const innerW = W - PAD.left - PAD.right;
+  const innerH = H - PAD.top  - PAD.bottom;
+  const n = timeline.length;
+
+  useEffect(() => { const t = setTimeout(() => setDrawn(true), 80); return () => clearTimeout(t); }, [timeline.length]);
+
+  if (!n) return <div className="h-64 flex items-center justify-center text-slate-500 text-sm italic">No timeline data yet.</div>;
+
+  const xOf = (i: number) => PAD.left + (i / Math.max(n - 1, 1)) * innerW;
+  const yOf = (v: number) => PAD.top  + (1 - Math.max(0, Math.min(1, v))) * innerH;
+
+  /* bezier smooth path */
+  const bezierPath = (vals: number[]) => {
+    const pts = vals.map((v, i) => [xOf(i), yOf(v)] as [number, number]);
+    if (pts.length < 2) return ``;
+    let d = `M ${pts[0][0]} ${pts[0][1]}`;
+    for (let i = 1; i < pts.length; i++) {
+      const cpx = (pts[i - 1][0] + pts[i][0]) / 2;
+      d += ` C ${cpx} ${pts[i - 1][1]}, ${cpx} ${pts[i][1]}, ${pts[i][0]} ${pts[i][1]}`;
+    }
+    return d;
+  };
+
+  /* grid lines (horizontal) */
+  const gridVals = [0, 0.25, 0.5, 0.75, 1.0];
+
+  return (
+    <div>
+      {/* legend */}
+      <div className="mb-4 flex flex-wrap gap-4 text-xs text-slate-400">
+        {SIGNALS.map((sig) => (
+          <span key={sig.id} className="flex items-center gap-1.5">
+            <span className="inline-block h-[3px] w-5 rounded-full" style={{ background: sig.stroke }} />
+            {sig.label}
+          </span>
+        ))}
       </div>
-      <div className="h-2 rounded-full bg-background/80">
-        <div className="h-full rounded-full" style={{ width: `${Math.max(6, Math.min(value, 1) * 100)}%`, background: `linear-gradient(90deg, ${color}cc, ${color})` }} />
+
+      {/* chart */}
+      <div className="relative overflow-hidden rounded-2xl border border-white/8 bg-[#02080e]">
+        {/* scanline overlay */}
+        <div className="pointer-events-none absolute inset-0 z-10"
+          style={{ backgroundImage: "repeating-linear-gradient(0deg,transparent,transparent 3px,rgba(0,0,0,0.06) 3px,rgba(0,0,0,0.06) 4px)" }} />
+        {/* glow */}
+        <div className="pointer-events-none absolute inset-0 z-0"
+          style={{ background: "radial-gradient(ellipse 60% 50% at 50% 100%,rgba(52,178,123,0.08),transparent)" }} />
+
+        <svg viewBox={`0 0 ${W} ${H}`} className="relative z-[1] w-full" style={{ height: 260 }}>
+          <defs>
+            {SIGNALS.map((sig) => (
+              <linearGradient key={sig.id} id={sig.id} x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%"   stopColor={sig.stroke} stopOpacity="0.32" />
+                <stop offset="100%" stopColor={sig.stroke} stopOpacity="0" />
+              </linearGradient>
+            ))}
+            <filter id="glow-line">
+              <feGaussianBlur stdDeviation="2.5" result="blur" />
+              <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
+            </filter>
+          </defs>
+
+          {/* grid */}
+          {gridVals.map((gv) => {
+            const gy = yOf(gv);
+            return (
+              <g key={gv}>
+                <line x1={PAD.left} y1={gy} x2={W - PAD.right} y2={gy}
+                  stroke="rgba(255,255,255,0.06)" strokeWidth="1" strokeDasharray="4 6" />
+                <text x={PAD.left - 6} y={gy + 3.5} textAnchor="end"
+                  fontSize="9" fill="rgba(148,163,184,0.5)" fontFamily="IBM Plex Mono, monospace">
+                  {Math.round(gv * 100)}
+                </text>
+              </g>
+            );
+          })}
+
+          {/* vertical time ticks every ~4 points */}
+          {timeline.filter((_, i) => i % Math.max(1, Math.floor(n / 8)) === 0).map((p, i) => {
+            const idx = i * Math.max(1, Math.floor(n / 8));
+            const tx = xOf(idx);
+            return (
+              <g key={`xt-${i}`}>
+                <line x1={tx} y1={PAD.top} x2={tx} y2={H - PAD.bottom}
+                  stroke="rgba(255,255,255,0.04)" strokeWidth="1" />
+              </g>
+            );
+          })}
+
+          {/* filled area + line per signal */}
+          {[...SIGNALS].reverse().map((sig) => {
+            const vals = timeline.map((p) => p[sig.field]);
+            const linePath = bezierPath(vals);
+            const lastX = xOf(n - 1);
+            const areaPath = linePath + ` L ${lastX} ${yOf(0)} L ${xOf(0)} ${yOf(0)} Z`;
+            /* animate via initial long dasharray trick */
+            const approxLen = 2200;
+            return (
+              <g key={sig.id}>
+                {/* area fill */}
+                <path d={areaPath} fill={sig.fill} />
+                {/* glow copy */}
+                <path d={linePath} fill="none" stroke={sig.stroke} strokeWidth="3"
+                  strokeOpacity="0.25" filter="url(#glow-line)"
+                  strokeDasharray={approxLen}
+                  strokeDashoffset={drawn ? 0 : approxLen}
+                  style={{ transition: "stroke-dashoffset 1.6s cubic-bezier(.4,0,.2,1)" }} />
+                {/* main line */}
+                <path d={linePath} fill="none" stroke={sig.stroke} strokeWidth="2"
+                  strokeLinecap="round" strokeLinejoin="round"
+                  strokeDasharray={approxLen}
+                  strokeDashoffset={drawn ? 0 : approxLen}
+                  style={{ transition: "stroke-dashoffset 1.4s cubic-bezier(.4,0,.2,1)" }} />
+              </g>
+            );
+          })}
+
+          {/* dot markers at each point for the primary signal (focus) */}
+          {timeline.map((p, i) => (
+            <circle key={`dot-${i}`}
+              cx={xOf(i)} cy={yOf(p.focusDepth)} r="2.5"
+              fill="#34b27b" fillOpacity={drawn ? 0.9 : 0}
+              style={{ transition: `fill-opacity 0.4s ease ${0.08 * i}s` }}
+            />
+          ))}
+
+          {/* state-label strip at very bottom */}
+          {timeline.filter((_, i) => i % Math.max(1, Math.floor(n / 6)) === 0).map((p, i) => {
+            const idx = i * Math.max(1, Math.floor(n / 6));
+            return (
+              <text key={`sl-${i}`} x={xOf(idx)} y={H - 6} textAnchor="middle"
+                fontSize="7.5" fill="rgba(148,163,184,0.45)" fontFamily="IBM Plex Mono, monospace">
+                {pretty(p.stateLabel).slice(0, 8)}
+              </text>
+            );
+          })}
+        </svg>
       </div>
     </div>
   );
 }
 
-function Empty({ text }: { text: string }) {
-  return <div className="rounded-3xl border border-dashed border-border/70 bg-background/35 px-4 py-10 text-center text-sm text-muted-foreground">{text}</div>;
+/* ── App breakdown table ─────────────────────────────────────────────────── */
+function AppBreakdownTable({ apps }: { apps: AppEntry[] }) {
+  return (
+    <div className="space-y-4">
+      {apps.slice(0, 7).map((a, i) => (
+        <div key={`${a.app}-${i}`}>
+          <div className="mb-1.5 flex items-center justify-between text-sm">
+            <span className="text-white font-medium truncate max-w-[120px]">{a.app}</span>
+            <span className="text-slate-400 text-xs font-mono shrink-0 ml-2">{a.share}% of time</span>
+          </div>
+          {/* stacked mini bars */}
+          <div className="flex gap-1">
+            <div className="flex-1">
+              <div className="text-[9px] font-mono text-emerald-400 mb-0.5">F {Math.round(a.avgFocus*100)}%</div>
+              <HBar value={a.avgFocus} color="#34b27b" height="h-1.5" />
+            </div>
+            <div className="flex-1">
+              <div className="text-[9px] font-mono text-amber-400 mb-0.5">C {Math.round(a.avgConfusion*100)}%</div>
+              <HBar value={a.avgConfusion} color="#ef4444" height="h-1.5" />
+            </div>
+            <div className="flex-1">
+              <div className="text-[9px] font-mono text-cyan-400 mb-0.5">Fa {Math.round(a.avgFatigue*100)}%</div>
+              <HBar value={a.avgFatigue} color="#f59e0b" height="h-1.5" />
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
 }
 
+/* ── Friction hotspots ───────────────────────────────────────────────────── */
+function FrictionList({ hotspots }: { hotspots: HotSpot[] }) {
+  if (!hotspots.length) return <p className="text-sm text-slate-500 italic">No friction hotspots recorded yet.</p>;
+  return (
+    <div className="space-y-3">
+      {hotspots.slice(0, 7).map((h) => {
+        const score = Math.round(h.frictionScore * 100);
+        return (
+          <div key={h.artifactId || h.artifactLabel}>
+            <div className="mb-1 flex items-center justify-between text-sm">
+              <span className="text-white truncate max-w-[180px]">{h.artifactLabel}</span>
+              <span className="ml-2 shrink-0 font-semibold" style={{ color: clr(1 - h.frictionScore) }}>{score}%</span>
+            </div>
+            <HBar value={score} max={100} color={clr(1 - h.frictionScore)} height="h-1.5" />
+            <div className="mt-0.5 flex gap-3 text-[10px] text-slate-500 font-mono">
+              <span>visits {h.visits}</span>
+              <span>revisits {h.revisits}</span>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/* ── Alert badge row ─────────────────────────────────────────────────────── */
+function AlertGrid({ totals }: { totals: DashboardPayload["analytics"]["alertTotals"] }) {
+  const items = [
+    { label: "Residue", value: totals.attentionResidue, Icon: TimerReset, color: "#fbbf24" },
+    { label: "Pre-error", value: totals.preError, Icon: AlertTriangle, color: "#ef4444" },
+    { label: "Fatigue", value: totals.fatigue, Icon: Brain, color: "#f59e0b" },
+    { label: "Confusion ep.", value: totals.confusionEpisodes, Icon: Activity, color: "#6aa9ff" },
+    { label: "Handoffs", value: totals.handoffCapsules, Icon: Database, color: "#94a3b8" },
+  ];
+  return (
+    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+      {items.map(({ label, value, Icon, color }) => (
+        <div key={label} className="rounded-[1.4rem] border border-white/8 bg-white/[0.03] p-4 text-center">
+          <div className="flex justify-center mb-2" style={{ color }}><Icon className="h-5 w-5" /></div>
+          <div className="text-2xl font-bold text-white">{value}</div>
+          <div className="mt-1 font-mono text-[9px] uppercase tracking-[0.2em] text-slate-500">{label}</div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/* ── Node type breakdown ─────────────────────────────────────────────────── */
+function NodeTypePills({ nodeTypes }: { nodeTypes: Record<string, number> }) {
+  const TYPE_COLORS_MAP: Record<string, string> = {
+    app: "#8b5cf6", application: "#8b5cf6", window: "#fbbf24", artifact: "#22d3ee",
+    session: "#34b27b", user: "#6aa9ff", state: "#f87171", classifier_state: "#fb7185",
+    cursor_state: "#a78bfa", expression: "#fbbf24", snapshot: "#94a3b8",
+  };
+  return (
+    <div className="flex flex-wrap gap-2">
+      {Object.entries(nodeTypes).map(([type, count]) => (
+        <div key={type} className="flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5">
+          <span className="h-2 w-2 rounded-full" style={{ background: TYPE_COLORS_MAP[type] || "#94a3b8" }} />
+          <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-slate-300">{type}</span>
+          <span className="text-white font-semibold text-xs ml-1">{count}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════════════════════════════════ */
 export default function DashboardPage() {
   const [data, setData] = useState<DashboardPayload | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  const loadDashboard = useCallback(async (silent: boolean) => {
-    if (silent) setRefreshing(true); else setLoading(true);
-    try {
-      const response = await fetch(DASHBOARD_URL, { cache: "no-store" });
-      const payload = (await response.json()) as DashboardPayload & { message?: string };
-      if (!response.ok || !payload.ok) throw new Error(payload.message || "Unable to load analytics.");
-      startTransition(() => { setData(payload); setError(null); });
-    } catch (issue) {
-      setError(issue instanceof Error ? issue.message : "Unable to load analytics.");
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  }, []);
+  const [nonce, setNonce] = useState(0);
 
   useEffect(() => {
-    void loadDashboard(false);
-    const timer = window.setInterval(() => void loadDashboard(true), 8000);
-    return () => window.clearInterval(timer);
-  }, [loadDashboard]);
+    let active = true;
+    const load = async (bg = false) => {
+      if (!bg) setLoading(true); else setRefreshing(true);
+      try {
+        const r = await fetch(DASHBOARD_URL, { cache: "no-store" });
+        const p = await r.json();
+        if (!r.ok) throw new Error(p?.message || "Unable to load dashboard.");
+        if (active) { setData(p); setError(null); }
+      } catch (e) {
+        if (active) setError(e instanceof Error ? e.message : "Unable to load dashboard.");
+      } finally {
+        if (active) { setLoading(false); setRefreshing(false); }
+      }
+    };
+    load();
+    return () => { active = false; };
+  }, [nonce]);
 
-  const donut = useMemo(() => {
-    const radius = 66;
-    const circumference = 2 * Math.PI * radius;
-    let offset = 0;
-    return (data?.analytics.stateDistribution ?? []).map((item) => {
-      const dash = (item.percentage / 100) * circumference;
-      const color = STATE_COLORS[item.label] ?? STATE_COLORS.unknown;
-      const arc = { dasharray: `${dash} ${circumference - dash}`, dashoffset: -offset };
-      offset += dash;
-      return { ...item, color, arc };
-    });
-  }, [data]);
-
-  const alerts = data ? [
-    { label: "Attention residue", value: data.analytics.alertTotals.attentionResidue, icon: Activity, color: "#6aa9ff" },
-    { label: "Pre-error alerts", value: data.analytics.alertTotals.preError, icon: AlertTriangle, color: "#e54b4f" },
-    { label: "Fatigue alerts", value: data.analytics.alertTotals.fatigue, icon: TrendingUp, color: "#ff8a4c" },
-    { label: "Confusion episodes", value: data.analytics.alertTotals.confusionEpisodes, icon: Brain, color: "#ffb347" },
-    { label: "Handoff capsules", value: data.analytics.alertTotals.handoffCapsules, icon: Clock3, color: "#8c5cff" },
-  ] : [];
+  const s = data?.summary;
+  const a = data?.analytics;
+  const timeline = a?.scoreTimeline.slice(-24) || [];
+  const graph = data?.live.graph;
 
   return (
-    <main className="relative min-h-screen overflow-hidden bg-background text-foreground">
-      <div aria-hidden className="pointer-events-none absolute inset-0" style={{ background: "radial-gradient(circle at top center, rgba(var(--primary-rgb), 0.18), transparent 32%), radial-gradient(circle at 85% 20%, rgba(106, 169, 255, 0.15), transparent 28%), linear-gradient(to bottom, rgba(17, 24, 28, 0.96), rgba(17, 24, 28, 1))" }} />
-      <div aria-hidden className="pointer-events-none absolute inset-0 opacity-40" style={{ backgroundImage: "repeating-linear-gradient(0deg, transparent, transparent 3px, rgba(255,255,255,0.018) 3px, rgba(255,255,255,0.018) 6px)" }} />
-      <div aria-hidden className="pointer-events-none absolute inset-0 opacity-25" style={{ backgroundImage: "linear-gradient(rgba(var(--primary-rgb), 0.05) 1px, transparent 1px), linear-gradient(90deg, rgba(var(--primary-rgb), 0.05) 1px, transparent 1px)", backgroundSize: "72px 72px" }} />
+    <div className="min-h-screen bg-[linear-gradient(180deg,#05090f_0%,#0a1219_45%,#081018_100%)] text-white">
       <Navbar />
+      <main className="mx-auto max-w-7xl px-6 pb-16 pt-28">
 
-      <div className="relative z-10 mx-auto max-w-7xl px-6 pb-16 pt-32">
-        <section className="relative overflow-hidden rounded-[32px] border border-border/70 bg-card/72 px-6 py-8 shadow-[0_24px_80px_rgba(0,0,0,0.35)] backdrop-blur md:px-8">
-          <div aria-hidden className="pointer-events-none absolute -right-24 top-0 h-56 w-56 rounded-full blur-3xl" style={{ background: "rgba(var(--primary-rgb), 0.18)" }} />
-          <div className="relative flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
-            <div className="max-w-3xl">
-              <span className="pill-badge">Cognitive Analytics Dashboard</span>
-              <h1 className="mt-5 font-serif text-4xl leading-tight text-foreground md:text-5xl">Homepage-matched analytics for NeuroTrace.</h1>
-              <p className="mt-4 max-w-2xl text-base leading-8 text-muted-foreground">The dashboard now stays in the same green-glow, serif-heading, glass-card visual system as the homepage while keeping the view analytics-only.</p>
-            </div>
-            <div className="flex flex-col items-start gap-3 sm:items-end">
-              <button type="button" onClick={() => void loadDashboard(true)} className="inline-flex items-center gap-2 rounded-full border border-border bg-background/60 px-5 py-2.5 text-sm font-medium text-foreground transition-all hover:border-primary/40 hover:bg-background">
-                <RefreshCw className={cn("h-4 w-4", refreshing ? "animate-spin" : "")} />
-                {refreshing ? "Refreshing..." : "Refresh analytics"}
-              </button>
-              <div className="flex flex-wrap gap-2 text-xs text-muted-foreground sm:justify-end">
-                <span className="stat-chip">Generated {formatDateTime(data?.generatedAt ?? null)}</span>
-                <span className="stat-chip">{data?.summary.snapshotCount ?? 0} snapshots</span>
-                <span className="stat-chip">Mongo {data?.source.mongoConnected ? "connected" : "offline"}</span>
-                <span className="stat-chip">Python {data?.source.liveConnected ? "connected" : "offline"}</span>
-              </div>
-            </div>
+        {/* ── header ───────────────────────────────────────────────────── */}
+        <div className="mb-8 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <div className="font-mono text-[11px] uppercase tracking-[0.36em] text-emerald-300/70">Overall DB analytics · cognitive observer</div>
+            <h1 className="mt-2 text-4xl font-semibold tracking-tight text-white">Cognitive Dashboard</h1>
           </div>
-        </section>
-
-        <div className="mt-8">
-          {loading ? (
-            <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-4">{Array.from({ length: 4 }).map((_, i) => <div key={i} className="glass-card h-40 animate-pulse border-border/60 bg-card/55" />)}</div>
-          ) : error ? (
-            <section className="glass-card border-destructive/40 bg-destructive/10 text-center">
-              <p className="pill-badge-red mx-auto mb-4">Analytics unavailable</p>
-              <h2 className="font-serif text-3xl text-foreground">The dashboard could not load right now.</h2>
-              <p className="mx-auto mt-3 max-w-2xl text-sm leading-7 text-muted-foreground">{error}{data?.source.liveError ? ` Live source details: ${data.source.liveError}` : ""}</p>
-            </section>
-          ) : data ? (
-            <div className="space-y-8">
-              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-                <Metric label="Top state" value={humanize(data.summary.topState)} helper="Most frequent stored cognitive state." icon={Layers} color={STATE_COLORS[data.summary.topState] ?? STATE_COLORS.unknown} />
-                <Metric label="Deep focus rate" value={pct(data.summary.deepFocusRate)} helper="Low-friction work windows." icon={Zap} color="#34b27b" />
-                <Metric label="Harmful confusion" value={pct(data.summary.harmfulConfusionRate)} helper="High-risk confusion windows." icon={TriangleAlert} color="#ffb347" />
-                <Metric label="Fatigue rate" value={pct(data.summary.fatigueRate)} helper="Fatigue-related windows captured." icon={Brain} color="#e54b4f" />
-              </div>
-
-              <div className="grid gap-6 xl:grid-cols-[1.55fr,1fr]">
-                <Card title="Trend lines across stored windows" subtitle="Focus, confusion, fatigue, and interruptibility over time.">
-                  {data.analytics.scoreTimeline.length ? (
-                    <div className="space-y-5">
-                      <div className="flex flex-wrap gap-3">{SERIES.map((s) => <div key={s.key} className="inline-flex items-center gap-2 rounded-full border border-border/60 bg-background/45 px-3 py-1.5 text-xs text-muted-foreground"><span className="h-2.5 w-2.5 rounded-full" style={{ background: s.color }} />{s.label}</div>)}</div>
-                      <div className="overflow-hidden rounded-[28px] border border-border/60 bg-background/35 p-4">
-                        <svg viewBox="0 0 860 260" className="h-72 w-full">
-                          {[0, 0.25, 0.5, 0.75, 1].map((level) => <line key={level} x1="0" y1={260 - level * 260} x2="860" y2={260 - level * 260} stroke="rgba(185,194,201,0.12)" strokeDasharray="6 10" />)}
-                          <path d={areaPath(data.analytics.scoreTimeline.map((p) => p.focusDepth), 860, 260)} fill="rgba(52,178,123,0.14)" />
-                          {SERIES.map((s) => <path key={s.key} d={linePath(data.analytics.scoreTimeline.map((p) => p[s.key as keyof TimelinePoint] as number), 860, 260)} fill="none" stroke={s.color} strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />)}
-                        </svg>
-                        <div className="mt-4 grid grid-cols-3 gap-3 text-xs text-muted-foreground">
-                          <div className="rounded-2xl border border-border/50 bg-card/45 px-3 py-2">Start {formatCompact(data.analytics.scoreTimeline[0]?.timestamp ?? null)}</div>
-                          <div className="rounded-2xl border border-border/50 bg-card/45 px-3 py-2 text-center">Mid {formatCompact(data.analytics.scoreTimeline[Math.floor((data.analytics.scoreTimeline.length - 1) / 2)]?.timestamp ?? null)}</div>
-                          <div className="rounded-2xl border border-border/50 bg-card/45 px-3 py-2 text-right">Latest {formatCompact(data.analytics.scoreTimeline[data.analytics.scoreTimeline.length - 1]?.timestamp ?? null)}</div>
-                        </div>
-                      </div>
-                    </div>
-                  ) : <Empty text="Timeline graphs will appear after enough windows are stored." />}
-                </Card>
-
-                <Card title="State distribution and score bars" subtitle="Session-wide state mix plus average signal intensity.">
-                  <div className="space-y-8">
-                    {donut.length ? (
-                      <div className="grid gap-6 lg:grid-cols-[220px,1fr]">
-                        <div className="relative mx-auto h-[220px] w-[220px]">
-                          <svg viewBox="0 0 180 180" className="h-full w-full -rotate-90">
-                            <circle cx="90" cy="90" r="66" fill="none" stroke="rgba(185,194,201,0.12)" strokeWidth="18" />
-                            {donut.map((item) => <circle key={item.label} cx="90" cy="90" r="66" fill="none" stroke={item.color} strokeWidth="18" strokeLinecap="round" strokeDasharray={item.arc.dasharray} strokeDashoffset={item.arc.dashoffset} />)}
-                          </svg>
-                          <div className="absolute inset-0 flex flex-col items-center justify-center"><span className="stat-chip mb-3">Top state</span><p className="text-center font-serif text-2xl text-foreground">{humanize(data.summary.topState)}</p></div>
-                        </div>
-                        <div className="space-y-4">{donut.map((item) => <div key={item.label} className="rounded-3xl border border-border/60 bg-background/40 px-4 py-3"><div className="mb-2 flex items-center justify-between gap-3"><div className="flex items-center gap-3"><span className="h-3 w-3 rounded-full" style={{ background: item.color }} /><span className="text-sm font-medium text-foreground">{humanize(item.label)}</span></div><span className="font-mono text-xs uppercase tracking-[0.2em] text-muted-foreground">{item.count} samples</span></div><div className="h-2 rounded-full bg-background/80"><div className="h-full rounded-full" style={{ width: `${Math.max(item.percentage, 4)}%`, background: `linear-gradient(90deg, ${item.color}aa, ${item.color})` }} /></div></div>)}</div>
-                      </div>
-                    ) : <Empty text="State distribution will appear after more snapshots are written." />}
-                    <div className="space-y-4">{data.analytics.scoreAverages.length ? data.analytics.scoreAverages.map((score) => <Bar key={score.key} label={score.label} value={score.value} color={SERIES.find((s) => s.key === score.key)?.color ?? "#34b27b"} />) : <Empty text="Average score bars will appear once enough data is stored." />}</div>
-                  </div>
-                </Card>
-              </div>
-
-              <div className="grid gap-6 lg:grid-cols-3">
-                <Card title="State transitions" subtitle="How often one state turns into another.">
-                  <div className="space-y-4">{data.analytics.stateTransitions.length ? data.analytics.stateTransitions.map((t) => <div key={`${t.from}-${t.to}`} className="rounded-3xl border border-border/60 bg-background/40 px-4 py-4"><div className="mb-3 flex items-center justify-between gap-3"><div className="flex items-center gap-3"><div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-primary"><GitBranch className="h-4 w-4" /></div><div><p className="text-sm font-medium text-foreground">{humanize(t.from)} to {humanize(t.to)}</p><p className="text-xs text-muted-foreground">Stored transition count</p></div></div><span className="font-serif text-2xl text-foreground">{t.count}</span></div><div className="h-2 rounded-full bg-background/80"><div className="h-full rounded-full bg-gradient-to-r from-primary via-chart-2 to-chart-3" style={{ width: `${Math.min(100, t.count * 16)}%` }} /></div></div>) : <Empty text="Transition analytics will appear after more state windows are captured." />}</div>
-                </Card>
-
-                <Card title="App breakdown" subtitle="Per-app focus, confusion, and fatigue averages.">
-                  <div className="space-y-4">{data.analytics.appBreakdown.length ? data.analytics.appBreakdown.map((app) => <div key={app.app} className="rounded-3xl border border-border/60 bg-background/40 px-4 py-4"><div className="mb-3 flex items-center justify-between gap-3"><div><p className="text-sm font-medium text-foreground">{app.app}</p><p className="text-xs text-muted-foreground">{app.count} windows • {Math.round(app.share)}% share</p></div><span className="stat-chip">Active app</span></div><div className="space-y-3"><Bar label="Avg focus" value={app.avgFocus} color="#34b27b" /><Bar label="Avg confusion" value={app.avgConfusion} color="#ffb347" /><Bar label="Avg fatigue" value={app.avgFatigue} color="#e54b4f" /></div></div>) : <Empty text="App analytics will appear when stored snapshots include enough app context." />}</div>
-                </Card>
-
-                <Card title="Alert totals" subtitle="Aggregated intervention signals from MongoDB.">
-                  <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1 2xl:grid-cols-2">{alerts.map((a) => { const Icon = a.icon; return <div key={a.label} className="rounded-3xl border border-border/60 bg-background/40 px-4 py-4"><div className="mb-4 flex h-11 w-11 items-center justify-center rounded-full" style={{ background: `${a.color}1f`, color: a.color }}><Icon className="h-5 w-5" /></div><p className="font-serif text-3xl text-foreground">{a.value}</p><p className="mt-2 text-sm text-muted-foreground">{a.label}</p></div>; })}</div>
-                </Card>
-              </div>
-
-              <div className="grid gap-6 xl:grid-cols-[1.05fr,1fr]">
-                <Card title="Extremes and insights" subtitle="Strongest recorded windows and AI-generated interpretations.">
-                  <div className="grid gap-4 md:grid-cols-2">{[
-                    { label: "Peak focus", value: data.analytics.scoreExtremes.highestFocus?.focusDepth ?? null, point: data.analytics.scoreExtremes.highestFocus, color: "#34b27b" },
-                    { label: "Peak confusion", value: data.analytics.scoreExtremes.highestConfusion?.confusionRisk ?? null, point: data.analytics.scoreExtremes.highestConfusion, color: "#ffb347" },
-                    { label: "Peak fatigue", value: data.analytics.scoreExtremes.highestFatigue?.fatigueRisk ?? null, point: data.analytics.scoreExtremes.highestFatigue, color: "#e54b4f" },
-                    { label: "Peak interruptibility", value: data.analytics.scoreExtremes.highestInterruptibility?.interruptibility ?? null, point: data.analytics.scoreExtremes.highestInterruptibility, color: "#6aa9ff" },
-                  ].map((item) => <div key={item.label} className="rounded-3xl border border-border/60 bg-background/40 px-4 py-4"><p className="font-mono text-[11px] uppercase tracking-[0.22em]" style={{ color: item.color }}>{item.label}</p><p className="mt-3 font-serif text-3xl text-foreground">{typeof item.value === "number" ? pct(item.value) : "—"}</p><p className="mt-2 text-xs leading-6 text-muted-foreground">{item.point ? humanize(item.point.stateLabel) : "No state captured"}<br />{formatDateTime(item.point?.timestamp ?? null)}</p></div>)}</div>
-                  <div className="mt-6 space-y-3">{data.analytics.insights.length ? data.analytics.insights.map((insight) => <div key={insight} className="flex gap-3 rounded-3xl border border-border/60 bg-background/40 px-4 py-4"><div className="mt-1 flex h-9 w-9 items-center justify-center rounded-full bg-primary/10 text-primary"><Sparkles className="h-4 w-4" /></div><p className="text-sm leading-7 text-muted-foreground">{insight}</p></div>) : <Empty text="Insights will appear as more interpreted events land in MongoDB." />}</div>
-                </Card>
-
-                <Card title="Friction hotspots and confusion episodes" subtitle="Artifacts and sessions that most often correlate with struggle.">
-                  <div className="grid gap-6 lg:grid-cols-2">
-                    <div className="space-y-3">
-                      <p className="pill-badge-amber w-fit">Friction hotspots</p>
-                      {data.analytics.frictionHotspots.length ? data.analytics.frictionHotspots.map((spot) => <div key={spot.artifactId} className="rounded-3xl border border-border/60 bg-background/40 px-4 py-4"><div className="mb-3 flex items-start justify-between gap-3"><div><p className="text-sm font-medium text-foreground">{spot.artifactLabel}</p><p className="text-xs leading-6 text-muted-foreground">{spot.visits} visits • {spot.revisits} revisits<br />{formatDateTime(spot.createdAt)}</p></div><span className="rounded-full px-3 py-1 font-mono text-[11px] uppercase tracking-[0.18em]" style={{ color: spot.frictionScore >= 0.5 ? "#e54b4f" : "#ffb347", background: spot.frictionScore >= 0.5 ? "rgba(229,75,79,0.12)" : "rgba(255,179,71,0.12)" }}>{pct(spot.frictionScore)}</span></div><div className="h-2 rounded-full bg-background/80"><div className="h-full rounded-full bg-gradient-to-r from-chart-3 via-[#ff8a4c] to-destructive" style={{ width: `${Math.max(6, Math.min(spot.frictionScore, 1) * 100)}%` }} /></div></div>) : <Empty text="No friction hotspots have been stored yet." />}
-                    </div>
-                    <div className="space-y-3">
-                      <p className="pill-badge-red w-fit">Confusion episodes</p>
-                      {data.analytics.confusionEpisodes.length ? data.analytics.confusionEpisodes.map((episode) => <div key={episode.episodeId} className="rounded-3xl border border-border/60 bg-background/40 px-4 py-4"><div className="mb-3 flex items-start justify-between gap-3"><div><p className="text-sm font-medium text-foreground">{episode.activeApp || "Unknown app"}</p><p className="text-xs leading-6 text-muted-foreground">Peak confusion {pct(episode.peakConfusion)}<br />{episode.durationS !== null ? `${episode.durationS}s duration` : "Duration still ongoing"}</p></div><span className="rounded-full px-3 py-1 font-mono text-[11px] uppercase tracking-[0.18em]" style={{ color: episode.status === "ongoing" ? "#e54b4f" : "#34b27b", background: episode.status === "ongoing" ? "rgba(229,75,79,0.12)" : "rgba(52,178,123,0.12)" }}>{humanize(episode.status)}</span></div><p className="text-xs text-muted-foreground">Started {formatDateTime(episode.startedAt)}</p></div>) : <Empty text="No confusion episodes have been stored yet." />}
-                    </div>
-                  </div>
-                </Card>
-              </div>
-
-              <div className="grid gap-6 xl:grid-cols-[1fr,1.1fr]">
-                <Card title="Recent event stream" subtitle="Latest event-level notes pulled from MongoDB.">
-                  <div className="space-y-3">{data.analytics.recentEvents.length ? data.analytics.recentEvents.map((event) => <div key={event.id} className="rounded-3xl border border-border/60 bg-background/40 px-4 py-4"><div className="mb-2 flex flex-wrap items-center justify-between gap-2"><span className="font-mono text-xs uppercase tracking-[0.22em] text-primary">{event.timestamp || formatCompact(event.createdAt)}</span><span className="text-xs text-muted-foreground">{formatDateTime(event.createdAt)}</span></div><p className="text-sm leading-7 text-muted-foreground">{event.message}</p></div>) : <Empty text="Event stream cards will appear after observer events are stored." />}</div>
-                </Card>
-
-                <Card title="At-a-glance analysis readout" subtitle="Quick score bars and session health indicators.">
-                  <div className="grid gap-4 md:grid-cols-2">
-                    <div className="rounded-3xl border border-border/60 bg-background/40 px-4 py-4">
-                      <p className="stat-chip mb-4">Core averages</p>
-                      <div className="space-y-4">
-                        <Bar label="Average focus depth" value={data.summary.avgFocusDepth} color="#34b27b" />
-                        <Bar label="Average confusion risk" value={data.summary.avgConfusionRisk} color="#ffb347" />
-                        <Bar label="Average fatigue risk" value={data.summary.avgFatigueRisk} color="#e54b4f" />
-                        <Bar label="Average interruptibility" value={data.summary.avgInterruptibility} color="#6aa9ff" />
-                      </div>
-                    </div>
-                    <div className="rounded-3xl border border-border/60 bg-background/40 px-4 py-4 space-y-4">
-                      <div className="rounded-2xl border border-border/50 bg-card/45 px-4 py-3"><p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Latest stored state</p><p className="mt-2 font-serif text-2xl text-foreground">{humanize(data.summary.latestState)}</p></div>
-                      <div className="rounded-2xl border border-border/50 bg-card/45 px-4 py-3"><p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Latest sample time</p><p className="mt-2 text-sm leading-7 text-foreground">{formatDateTime(data.summary.latestGeneratedAt)}</p></div>
-                      <div className="rounded-2xl border border-border/50 bg-card/45 px-4 py-3"><p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Data source health</p><p className="mt-2 text-sm leading-7 text-foreground">MongoDB is {data.source.mongoConnected ? "connected" : "offline"} and Python live feed is {data.source.liveConnected ? "connected" : "offline"}.</p></div>
-                    </div>
-                  </div>
-                </Card>
-              </div>
-            </div>
-          ) : null}
+          <div className="flex flex-wrap items-center gap-3">
+            {[
+              [`${s?.snapshotCount ?? "—"} snapshots`, "#34b27b"],
+              [pretty(s?.topState), "#6aa9ff"],
+            ].map(([label, col]) => (
+              <span key={label} className="rounded-full border px-3 py-1 font-mono text-[11px] uppercase tracking-[0.2em]"
+                style={{ borderColor: `${col}40`, background: `${col}18`, color: col }}>{label}</span>
+            ))}
+            <button type="button" onClick={() => setNonce((n) => n + 1)}
+              className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm text-slate-200 transition hover:bg-white/10">
+              <RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />Refresh
+            </button>
+          </div>
         </div>
-      </div>
-    </main>
+
+        {loading ? (
+          <div className="rounded-[2rem] border border-white/10 bg-white/[0.04] p-8 text-slate-300">Loading from MongoDB…</div>
+        ) : error ? (
+          <div className="rounded-[2rem] border border-red-400/20 bg-red-500/10 p-8 text-red-100">{error}</div>
+        ) : !data ? null : (
+          <div className="space-y-6">
+
+            {/* ── row 1: KPI cards ──────────────────────────────────────── */}
+            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+              <KpiCard icon={<Brain className="h-4 w-4"/>} label="Avg Focus Depth" value={pct(s?.avgFocusDepth)}
+                sub={`deep-focus ${s?.deepFocusRate ?? 0}% of session`} color="#34b27b" />
+              <KpiCard icon={<Activity className="h-4 w-4"/>} label="Avg Confusion Risk" value={pct(s?.avgConfusionRisk)}
+                sub={`harmful confusion ${s?.harmfulConfusionRate ?? 0}%`} color="#ef4444" />
+              <KpiCard icon={<AlertTriangle className="h-4 w-4"/>} label="Avg Fatigue Risk" value={pct(s?.avgFatigueRisk)}
+                sub={`fatigue-state ${s?.fatigueRate ?? 0}% of snapshots`} color="#f59e0b" />
+              <KpiCard icon={<Network className="h-4 w-4"/>} label="Avg Interruptibility" value={pct(s?.avgInterruptibility)}
+                sub={`${graph?.stats.nodeCount ?? 0} graph nodes · ${graph?.stats.relationCount ?? 0} links`} color="#6aa9ff" />
+            </div>
+
+            {/* ── row 2: alert totals banner ────────────────────────────── */}
+            {/* <AlertGrid totals={a!.alertTotals} /> */}
+
+            {/* ── row 3: timeline + score averages ─────────────────────── */}
+            <div className="grid gap-6 xl:grid-cols-[1.5fr_0.9fr]">
+              <Panel eyebrow="Signal timeline" title="Score movement over time" aside={`${timeline.length} snapshots`}>
+                <SignalTimeline timeline={timeline} />
+              </Panel>
+              <Panel eyebrow="DB averages" title="All 6 cognitive scores">
+                <ScoreAverageBars averages={a?.scoreAverages || []} />
+              </Panel>
+            </div>
+
+            {/* ── row 4: state distribution + state transitions ────────── */}
+            <div className="grid gap-6 xl:grid-cols-2">
+              <Panel eyebrow="State distribution" title="Cognitive state breakdown">
+                <StateDistBars distribution={a?.stateDistribution || []} />
+              </Panel>
+              <Panel eyebrow="State transitions" title="How states flow into each other">
+                <TransitionTable transitions={a?.stateTransitions || []} />
+              </Panel>
+            </div>
+
+            {/* ── row 5: 3D graph ───────────────────────────────────────── */}
+            <Panel
+              eyebrow="Neo4j entity graph · DB context"
+              title="Observer graph — entities & relations"
+              aside={`${graph?.stats.nodeCount ?? 0} nodes / ${graph?.stats.relationCount ?? 0} links`}
+            >
+              <AnalyticsNodeGraph nodes={graph?.nodes ?? []} links={graph?.links ?? []} height={500} />
+
+              {/* graph stat pills */}
+              <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+                {[
+                  ["Total nodes", graph?.stats.nodeCount ?? 0],
+                  ["Total links", graph?.stats.relationCount ?? 0],
+                  ["DB nodes", graph?.stats.dbNodeCount ?? 0],
+                  ["DB links", graph?.stats.dbRelationCount ?? 0],
+                  ["Snapshots", s?.snapshotCount ?? 0],
+                  ["State types", Object.keys(graph?.stats.nodeTypes ?? {}).length],
+                ].map(([lbl, val]) => (
+                  <div key={String(lbl)} className="rounded-2xl border border-white/8 bg-white/[0.03] px-4 py-3 text-center">
+                    <div className="font-mono text-[9px] uppercase tracking-[0.24em] text-slate-500">{lbl}</div>
+                    <div className="mt-1 text-xl font-bold text-white">{val}</div>
+                  </div>
+                ))}
+              </div>
+
+              {/* node-type pills */}
+              <div className="mt-4">
+                <div className="mb-2 font-mono text-[10px] uppercase tracking-[0.28em] text-slate-500">Node types</div>
+                <NodeTypePills nodeTypes={graph?.stats.nodeTypes ?? {}} />
+              </div>
+            </Panel>
+
+            {/* ── row 6: app breakdown + friction hotspots ─────────────── */}
+            <div className="grid gap-6 xl:grid-cols-2">
+              <Panel eyebrow="Per-app analysis" title="App workload & cognitive impact">
+                <AppBreakdownTable apps={a?.appBreakdown || []} />
+              </Panel>
+              <Panel eyebrow="Friction analysis" title="Highest-friction artifacts">
+                <FrictionList hotspots={a?.frictionHotspots || []} />
+              </Panel>
+            </div>
+
+            {/* ── row 7: score extremes ─────────────────────────────────── */}
+            <Panel eyebrow="Score extremes" title="Peak cognitive moments in the DB">
+              <div className="grid gap-4 sm:grid-cols-3">
+                {[
+                  { label: "Highest Focus", point: a?.scoreExtremes.highestFocus, field: "focusDepth", color: "#34b27b", Icon: TrendingUp },
+                  { label: "Highest Confusion", point: a?.scoreExtremes.highestConfusion, field: "confusionRisk", color: "#ef4444", Icon: Brain },
+                  { label: "Highest Fatigue", point: a?.scoreExtremes.highestFatigue, field: "fatigueRisk", color: "#f59e0b", Icon: Eye },
+                ].map(({ label, point, field, color, Icon }) => (
+                  <div key={label} className="rounded-[1.6rem] border border-white/8 bg-white/[0.03] p-5">
+                    <div className="flex items-center gap-2 mb-3" style={{ color }}>
+                      <Icon className="h-4 w-4" />
+                      <span className="font-mono text-[10px] uppercase tracking-[0.24em]">{label}</span>
+                    </div>
+                    {point ? (
+                      <>
+                        <div className="text-3xl font-bold text-white mb-1">{pct((point as unknown as Record<string, number>)[field])}</div>
+                        <div className="text-xs text-slate-400 capitalize">{pretty(point.stateLabel)}</div>
+                        <HBar value={(point as unknown as Record<string, number>)[field]} color={color} />
+                      </>
+                    ) : (
+                      <div className="text-slate-500 text-sm italic">No data</div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </Panel>
+
+          </div>
+        )}
+      </main>
+    </div>
   );
 }
