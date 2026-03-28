@@ -1,5 +1,9 @@
 import User from '../models/User.js';
 import { signToken } from '../utils/jwt.js';
+import {
+    normalizeUserProfilePayload,
+    serializeUser,
+} from '../utils/userProfile.js';
 
 const generateToken = (id) => {
     return signToken({ id }, { expiresIn: '30d' });
@@ -10,7 +14,8 @@ const generateToken = (id) => {
 // @access  Public
 export const signupUser = async (req, res) => {
     try {
-        const { name, email, password } = req.body;
+        const profile = normalizeUserProfilePayload(req.body);
+        const { name, email, password, username } = profile;
 
         if (!name || !email || !password) {
             return res.status(400).json({ message: 'Please provide all required fields' });
@@ -22,17 +27,18 @@ export const signupUser = async (req, res) => {
             return res.status(400).json({ message: 'User already exists' });
         }
 
-        const user = await User.create({
-            name,
-            email,
-            password,
-        });
+        if (username) {
+            const usernameExists = await User.findOne({ username });
+            if (usernameExists) {
+                return res.status(400).json({ message: 'Username already exists' });
+            }
+        }
+
+        const user = await User.create(profile);
 
         if (user) {
             res.status(201).json({
-                _id: user._id,
-                name: user.name,
-                email: user.email,
+                user: serializeUser(user),
                 token: generateToken(user._id),
             });
         } else {
@@ -54,9 +60,7 @@ export const loginUser = async (req, res) => {
 
         if (user && (await user.matchPassword(password))) {
             res.json({
-                _id: user._id,
-                name: user.name,
-                email: user.email,
+                user: serializeUser(user),
                 token: generateToken(user._id),
             });
         } else {
@@ -76,11 +80,7 @@ export const getUserProfile = async (req, res) => {
         const user = await User.findById(req.user._id);
 
         if (user) {
-            res.json({
-                _id: user._id,
-                name: user.name,
-                email: user.email,
-            });
+            res.json({ user: serializeUser(user) });
         } else {
             res.status(404).json({ message: 'User not found' });
         }

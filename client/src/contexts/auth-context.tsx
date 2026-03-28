@@ -15,12 +15,32 @@ import { SERVER_URL } from "@/utils/commonHelper";
 
 type User = {
   email: string;
-  role: string;
+  role?: string;
   name?: string;
   username?: string;
+  organization?: string;
+  department?: string;
+  location?: string;
+  bio?: string;
+  skills?: string[];
+  interests?: string[];
+  goals?: string[];
+  socialLinks?: {
+    github?: string;
+    linkedin?: string;
+    portfolio?: string;
+  };
   profileImageUrl?: string;
   avatarUrl?: string;
-  // Add other user properties as needed
+  graphSeeds?: {
+    roles?: string[];
+    organizations?: string[];
+    departments?: string[];
+    locations?: string[];
+    skills?: string[];
+    interests?: string[];
+    goals?: string[];
+  };
 };
 
 type AuthContextType = {
@@ -64,9 +84,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     async (email: string, password: string) => {
       try {
         const apiUrl = SERVER_URL;
-        console.log("Attempting login to:", `${apiUrl}/api/users/login`);
 
-        const response = await fetch(`${apiUrl}/api/users/login`, {
+        const response = await fetch(`${apiUrl}/api/auth/login`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -98,7 +117,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return { success: false, error: "An error occurred during login" };
       }
     },
-    [handleAuthSuccess, toast],
+    [handleAuthSuccess],
   );
 
   const loginWithGoogle = useCallback(
@@ -141,7 +160,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         };
       }
     },
-    [handleAuthSuccess, toast],
+    [handleAuthSuccess],
   );
 
   const logout = useCallback(() => {

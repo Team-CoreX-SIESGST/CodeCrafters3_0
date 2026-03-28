@@ -118,6 +118,74 @@ function buildTimeline(snapshots) {
     }));
 }
 
+function buildStateTransitions(snapshots) {
+  const ordered = [...snapshots].reverse();
+  const counts = new Map();
+
+  for (let index = 1; index < ordered.length; index += 1) {
+    const previous = normaliseLabel(ordered[index - 1]?.state_label, "steady");
+    const current = normaliseLabel(ordered[index]?.state_label, "steady");
+    const key = `${previous}->${current}`;
+    counts.set(key, (counts.get(key) || 0) + 1);
+  }
+
+  return [...counts.entries()]
+    .map(([key, count]) => {
+      const [from, to] = key.split("->");
+      return { from, to, count };
+    })
+    .sort((left, right) => right.count - left.count)
+    .slice(0, 8);
+}
+
+function buildAppBreakdown(snapshots) {
+  const grouped = snapshots.reduce((accumulator, snapshot) => {
+    const app = normaliseLabel(snapshot?.active_app, "Unknown");
+    if (!accumulator[app]) {
+      accumulator[app] = {
+        app,
+        count: 0,
+        focus: [],
+        confusion: [],
+        fatigue: [],
+      };
+    }
+
+    accumulator[app].count += 1;
+    accumulator[app].focus.push(Number(snapshot?.scores?.focus_depth || 0));
+    accumulator[app].confusion.push(Number(snapshot?.scores?.confusion_risk || 0));
+    accumulator[app].fatigue.push(Number(snapshot?.scores?.fatigue_risk || 0));
+    return accumulator;
+  }, {});
+
+  return Object.values(grouped)
+    .map((entry) => ({
+      app: entry.app,
+      count: entry.count,
+      share: percentage(entry.count, snapshots.length),
+      avgFocus: average(entry.focus.filter(Number.isFinite)),
+      avgConfusion: average(entry.confusion.filter(Number.isFinite)),
+      avgFatigue: average(entry.fatigue.filter(Number.isFinite)),
+    }))
+    .sort((left, right) => right.count - left.count)
+    .slice(0, 6);
+}
+
+function buildScoreExtremes(timeline) {
+  const maxBy = (field) =>
+    timeline.reduce((best, point) => {
+      if (!best || Number(point[field]) > Number(best[field])) return point;
+      return best;
+    }, null);
+
+  return {
+    highestFocus: maxBy("focusDepth"),
+    highestConfusion: maxBy("confusionRisk"),
+    highestFatigue: maxBy("fatigueRisk"),
+    highestInterruptibility: maxBy("interruptibility"),
+  };
+}
+
 function buildInsights({ liveCurrent, summary, distribution, hotspots, alertTotals }) {
   const insights = [];
 
@@ -211,6 +279,7 @@ export const getCognitiveDashboard = async (_req, res) => {
     const distribution = buildStateDistribution(snapshots);
     const latestSnapshot = snapshots[0] || null;
     const liveCurrent = mapLiveCurrent(liveDashboard.data);
+    const timeline = buildTimeline(snapshots);
 
     const summary = {
       snapshotCount: snapshots.length,
@@ -287,7 +356,10 @@ export const getCognitiveDashboard = async (_req, res) => {
       analytics: {
         stateDistribution: distribution,
         scoreAverages: buildScoreAverages(snapshots),
-        scoreTimeline: buildTimeline(snapshots),
+        scoreTimeline: timeline,
+        stateTransitions: buildStateTransitions(snapshots),
+        appBreakdown: buildAppBreakdown(snapshots),
+        scoreExtremes: buildScoreExtremes(timeline),
         alertTotals,
         frictionHotspots,
         recentEvents,

@@ -14,6 +14,7 @@ import {
 import { SERVER_URL } from "@/utils/commonHelper";
 
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/contexts/auth-context";
 import { toast } from "sonner";
 
@@ -38,16 +39,44 @@ const GoogleLogo = () => (
   </svg>
 );
 
+type GoogleOAuthCodeClient = {
+  requestCode: () => void;
+};
+
+type GoogleWindow = Window & {
+  google?: {
+    accounts?: {
+      oauth2?: {
+        initCodeClient: (config: {
+          client_id: string;
+          scope: string;
+          ux_mode: "popup";
+          callback: (response: { code?: string; error?: string }) => void;
+        }) => GoogleOAuthCodeClient;
+      };
+    };
+  };
+};
+
 export function SignupForm({
   className,
   ...props
 }: React.ComponentProps<"div">) {
   const router = useRouter();
   const { loginWithGoogle } = useAuth();
+  const [name, setName] = useState("");
   const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [role, setRole] = useState("");
+  const [organization, setOrganization] = useState("");
+  const [department, setDepartment] = useState("");
+  const [location, setLocation] = useState("");
+  const [skills, setSkills] = useState("");
+  const [interests, setInterests] = useState("");
+  const [goals, setGoals] = useState("");
+  const [bio, setBio] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
 
@@ -74,8 +103,8 @@ export function SignupForm({
     e.preventDefault();
 
     // Input validation
-    if (!username.trim()) {
-      toast.error("Username is required");
+    if (!name.trim()) {
+      toast.error("Full name is required");
       return;
     }
 
@@ -97,15 +126,24 @@ export function SignupForm({
     setIsLoading(true);
 
     try {
-      const response = await fetch(`${SERVER_URL}/api/users/register`, {
+      const response = await fetch(`${SERVER_URL}/api/auth/signup`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
+          name: name.trim(),
           username: username.trim(),
           email: email.trim().toLowerCase(),
           password,
+          role: role.trim(),
+          organization: organization.trim(),
+          department: department.trim(),
+          location: location.trim(),
+          skills,
+          interests,
+          goals,
+          bio: bio.trim(),
         }),
       });
 
@@ -122,10 +160,19 @@ export function SignupForm({
       }
 
       // Clear form on success
+      setName("");
       setUsername("");
       setEmail("");
       setPassword("");
       setConfirmPassword("");
+      setRole("");
+      setOrganization("");
+      setDepartment("");
+      setLocation("");
+      setSkills("");
+      setInterests("");
+      setGoals("");
+      setBio("");
 
       toast.success("Success!", {
         description: "Account created successfully. Redirecting to login...",
@@ -165,7 +212,7 @@ export function SignupForm({
     try {
       setIsGoogleLoading(true);
 
-      const { google } = window as typeof window & { google?: any };
+      const { google } = window as GoogleWindow;
       if (!google || !google.accounts || !google.accounts.oauth2) {
         toast.error("Google SDK not loaded", {
           description: "Please check your network connection and try again.",
@@ -228,15 +275,28 @@ export function SignupForm({
             </p> */}
           </div>
           <Field>
-            <FieldLabel htmlFor="username">Username</FieldLabel>
+            <FieldLabel htmlFor="name">Full Name</FieldLabel>
+            <Input
+              id="name"
+              type="text"
+              placeholder="Aarya Kadam"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              required
+            />
+          </Field>
+          <Field>
+            <FieldLabel htmlFor="username">Username / Handle</FieldLabel>
             <Input
               id="username"
               type="text"
-              placeholder="Aarya Kadam"
+              placeholder="aaryakadam"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
-              required
             />
+            <FieldDescription>
+              Optional, but useful later for collaboration graphs and identity mapping.
+            </FieldDescription>
           </Field>
           <Field>
             <FieldLabel htmlFor="email">Email</FieldLabel>
@@ -269,6 +329,88 @@ export function SignupForm({
               onChange={(e) => setConfirmPassword(e.target.value)}
               required
               minLength={6}
+            />
+          </Field>
+          <FieldSeparator>Future graph-ready profile</FieldSeparator>
+          <Field>
+            <FieldLabel htmlFor="role">Role / Title</FieldLabel>
+            <Input
+              id="role"
+              type="text"
+              placeholder="Student, Frontend Developer, Researcher"
+              value={role}
+              onChange={(e) => setRole(e.target.value)}
+            />
+          </Field>
+          <Field>
+            <FieldLabel htmlFor="organization">Organization / College</FieldLabel>
+            <Input
+              id="organization"
+              type="text"
+              placeholder="KSR College of Engineering"
+              value={organization}
+              onChange={(e) => setOrganization(e.target.value)}
+            />
+          </Field>
+          <Field>
+            <FieldLabel htmlFor="department">Department / Domain</FieldLabel>
+            <Input
+              id="department"
+              type="text"
+              placeholder="Computer Science, Product Design, AI/ML"
+              value={department}
+              onChange={(e) => setDepartment(e.target.value)}
+            />
+          </Field>
+          <Field>
+            <FieldLabel htmlFor="location">Location</FieldLabel>
+            <Input
+              id="location"
+              type="text"
+              placeholder="Chennai, India"
+              value={location}
+              onChange={(e) => setLocation(e.target.value)}
+            />
+          </Field>
+          <Field>
+            <FieldLabel htmlFor="skills">Skills</FieldLabel>
+            <Input
+              id="skills"
+              type="text"
+              placeholder="React, Python, Data Analysis"
+              value={skills}
+              onChange={(e) => setSkills(e.target.value)}
+            />
+            <FieldDescription>
+              Add comma-separated skills so we can build richer relation maps later.
+            </FieldDescription>
+          </Field>
+          <Field>
+            <FieldLabel htmlFor="interests">Interests</FieldLabel>
+            <Input
+              id="interests"
+              type="text"
+              placeholder="Cognitive AI, Learning Systems, Graph Analytics"
+              value={interests}
+              onChange={(e) => setInterests(e.target.value)}
+            />
+          </Field>
+          <Field>
+            <FieldLabel htmlFor="goals">Goals</FieldLabel>
+            <Textarea
+              id="goals"
+              placeholder="Hackathon projects, internships, research collaboration"
+              value={goals}
+              onChange={(e) => setGoals(e.target.value)}
+            />
+          </Field>
+          <Field>
+            <FieldLabel htmlFor="bio">Current Focus</FieldLabel>
+            <Textarea
+              id="bio"
+              placeholder="Tell us what you are building or exploring right now."
+              value={bio}
+              onChange={(e) => setBio(e.target.value)}
             />
           </Field>
           <Field>

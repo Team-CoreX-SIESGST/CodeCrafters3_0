@@ -19,7 +19,9 @@ class AppMonitor:
         self._thread: threading.Thread | None = None
         self._active_app = "Unknown"
         self._active_window = "Unknown"
-        self._open_apps: list[dict[str, str]] = []
+        self._active_pid = 0
+        self._active_exe = ""
+        self._open_apps: list[dict[str, str | int]] = []
         self._last_seen_active: tuple[str, str] | None = None
 
     def start(self) -> None:
@@ -36,17 +38,21 @@ class AppMonitor:
             return {
                 "active_app": self._active_app,
                 "active_window": self._active_window,
+                "active_pid": self._active_pid,
+                "active_exe": self._active_exe,
                 "open_apps": list(self._open_apps),
             }
 
     def _poll_loop(self) -> None:
         while not self._stop_event.is_set():
-            active_app, active_window = self._get_active_window()
+            active_app, active_window, active_pid, active_exe = self._get_active_window()
             open_apps = self._get_open_apps()
 
             with self._lock:
                 self._active_app = active_app
                 self._active_window = active_window
+                self._active_pid = active_pid
+                self._active_exe = active_exe
                 self._open_apps = open_apps
 
             active_signature = (active_app, active_window)
@@ -60,7 +66,7 @@ class AppMonitor:
 
             time.sleep(self.poll_interval)
 
-    def _get_active_window(self) -> tuple[str, str]:
+    def _get_active_window(self) -> tuple[str, str, int, str]:
         if hasattr(ctypes, "windll"):
             user32 = ctypes.windll.user32
             hwnd = user32.GetForegroundWindow()
@@ -68,12 +74,12 @@ class AppMonitor:
                 title = self._window_title(hwnd)
                 pid = wintypes.DWORD()
                 user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
-                process_name = self._process_name(pid.value)
-                return process_name or "Unknown", title or "Unknown"
+                process_name, process_exe = self._process_info(pid.value)
+                return process_name or "Unknown", title or "Unknown", pid.value or 0, process_exe
 
-        return "Unknown", "Unknown"
+        return "Unknown", "Unknown", 0, ""
 
-    def _get_open_apps(self) -> list[dict[str, str]]:
+    def _get_open_apps(self) -> list[dict[str, str | int]]:
         if not hasattr(ctypes, "windll"):
             return []
 
@@ -96,7 +102,7 @@ class AppMonitor:
 
             pid = wintypes.DWORD()
             user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
-            process_name = self._process_name(pid.value)
+            process_name, process_exe = self._process_info(pid.value)
             signature = (process_name, title)
             if signature in seen:
                 return True
@@ -106,6 +112,9 @@ class AppMonitor:
                 {
                     "name": process_name or "Unknown",
                     "title": title,
+                    "pid": pid.value or 0,
+                    "exe": process_exe,
+                    "window_id": hex(int(hwnd)),
                 }
             )
             return len(apps) < 8
@@ -124,10 +133,11 @@ class AppMonitor:
         return buffer.value.strip()
 
     @staticmethod
-    def _process_name(pid: int) -> str:
+    def _process_info(pid: int) -> tuple[str, str]:
         if not pid:
-            return "Unknown"
+            return "Unknown", ""
         try:
-            return psutil.Process(pid).name()
+            process = psutil.Process(pid)
+            return process.name(), process.exe()
         except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
-            return "Unknown"
+            return "Unknown", ""

@@ -15,9 +15,99 @@ const userSchema = new mongoose.Schema(
             lowercase: true,
             trim: true,
         },
+        username: {
+            type: String,
+            unique: true,
+            sparse: true,
+            trim: true,
+        },
         password: {
             type: String,
             required: true,
+        },
+        role: {
+            type: String,
+            trim: true,
+            default: '',
+        },
+        organization: {
+            type: String,
+            trim: true,
+            default: '',
+        },
+        department: {
+            type: String,
+            trim: true,
+            default: '',
+        },
+        location: {
+            type: String,
+            trim: true,
+            default: '',
+        },
+        bio: {
+            type: String,
+            trim: true,
+            default: '',
+        },
+        skills: {
+            type: [String],
+            default: [],
+        },
+        interests: {
+            type: [String],
+            default: [],
+        },
+        goals: {
+            type: [String],
+            default: [],
+        },
+        socialLinks: {
+            github: {
+                type: String,
+                trim: true,
+                default: '',
+            },
+            linkedin: {
+                type: String,
+                trim: true,
+                default: '',
+            },
+            portfolio: {
+                type: String,
+                trim: true,
+                default: '',
+            },
+        },
+        graphSeeds: {
+            roles: {
+                type: [String],
+                default: [],
+            },
+            organizations: {
+                type: [String],
+                default: [],
+            },
+            departments: {
+                type: [String],
+                default: [],
+            },
+            locations: {
+                type: [String],
+                default: [],
+            },
+            skills: {
+                type: [String],
+                default: [],
+            },
+            interests: {
+                type: [String],
+                default: [],
+            },
+            goals: {
+                type: [String],
+                default: [],
+            },
         },
     },
     {

@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import math
 import time
-from dataclasses import dataclass, field
 from collections import deque
+from dataclasses import dataclass
 from typing import Deque
 
 # ---------------------------------------------------------------------------
@@ -225,6 +225,94 @@ class CognitiveStateClassifier:
 
         # Temporal smoothing buffer
         self._state_buffer: Deque[str] = deque(maxlen=self.SMOOTHING_WINDOW)
+
+    def export_baseline(self) -> dict[str, object]:
+        return {
+            "version": 1,
+            "calibration_seconds": self.calibration_seconds,
+            "minimum_samples": self.minimum_samples,
+            "started_at": self.started_at,
+            "baseline_ready": self.is_baseline_ready(),
+            "calibration_stats": {
+                name: {
+                    "count": stat.count,
+                    "mean": stat.mean,
+                    "m2": stat.m2,
+                }
+                for name, stat in self._cal_stats.items()
+                if stat.count > 0
+            },
+            "ewma_stats": {
+                name: {
+                    "alpha": stat.alpha,
+                    "mean": stat.mean,
+                    "var": stat.var,
+                    "initialised": stat.initialised,
+                }
+                for name, stat in self._ewma_stats.items()
+                if stat.initialised
+            },
+            "ewma_ready": self._ewma_ready,
+            "state_buffer": list(self._state_buffer),
+        }
+
+    def load_baseline(
+        self,
+        payload: dict[str, object] | None,
+        *,
+        now: float | None = None,
+    ) -> bool:
+        if not isinstance(payload, dict):
+            return False
+
+        cal_stats = payload.get("calibration_stats")
+        ewma_stats = payload.get("ewma_stats")
+        if not isinstance(cal_stats, dict) or not isinstance(ewma_stats, dict):
+            return False
+
+        restored_any = False
+        for name in FEATURE_NAMES:
+            item = cal_stats.get(name)
+            if not isinstance(item, dict):
+                continue
+            stat = self._cal_stats[name]
+            stat.count = int(item.get("count", 0) or 0)
+            stat.mean = float(item.get("mean", 0.0) or 0.0)
+            stat.m2 = float(item.get("m2", 0.0) or 0.0)
+            restored_any = restored_any or stat.count > 0
+
+        for name in FEATURE_NAMES:
+            item = ewma_stats.get(name)
+            if not isinstance(item, dict):
+                continue
+            stat = self._ewma_stats[name]
+            stat.alpha = float(item.get("alpha", stat.alpha) or stat.alpha)
+            stat.mean = float(item.get("mean", 0.0) or 0.0)
+            stat.var = float(item.get("var", 0.0) or 0.0)
+            stat.initialised = bool(item.get("initialised", False))
+            restored_any = restored_any or stat.initialised
+
+        self._ewma_ready = bool(payload.get("ewma_ready", False))
+        self._state_buffer.clear()
+        for state in payload.get("state_buffer", []):
+            if isinstance(state, str) and state:
+                self._state_buffer.append(state)
+
+        if not restored_any:
+            return False
+
+        ready = bool(payload.get("baseline_ready", False)) or self.is_baseline_ready()
+        current_time = now if now is not None else time.time()
+        saved_started_at = float(payload.get("started_at", self.started_at) or self.started_at)
+        if ready:
+            self.started_at = min(saved_started_at, current_time - self.calibration_seconds)
+            self._ewma_ready = True
+        else:
+            self.started_at = saved_started_at
+        return True
+
+    def is_baseline_ready(self) -> bool:
+        return self._ewma_ready and self._min_sample_count() >= self.minimum_samples
 
     # ------------------------------------------------------------------
     # Public API
