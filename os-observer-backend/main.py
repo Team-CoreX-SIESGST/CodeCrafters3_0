@@ -1,5 +1,3 @@
-#main.py
-
 from __future__ import annotations
 
 import threading
@@ -19,7 +17,9 @@ def main() -> None:
     monitor = ActivityMonitor()
     monitor.start()
 
-    api_thread = threading.Thread(target=run_api, args=(monitor,), daemon=True)
+    api_thread = threading.Thread(
+        target=run_api, args=(monitor,), daemon=True, name="UvicornAPI"
+    )
     api_thread.start()
 
     overlay = StatusOverlay(payload_provider=monitor.snapshot, refresh_ms=700)
