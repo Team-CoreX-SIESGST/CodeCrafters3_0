@@ -5,7 +5,7 @@ import threading
 import uvicorn
 
 from activity_monitor import ActivityMonitor, create_api_app, settings
-from overlay import StatusOverlay
+from overlay import StatusOverlay, ONNXViewerWindow
 
 
 def run_api(activity_monitor: ActivityMonitor) -> None:
@@ -23,6 +23,10 @@ def main() -> None:
     api_thread.start()
 
     overlay = StatusOverlay(payload_provider=monitor.snapshot, refresh_ms=200)
+
+    # Launch the ONNX Inference Viewer as a separate Toplevel window
+    ONNXViewerWindow(parent=overlay.root, payload_provider=monitor.snapshot, refresh_ms=500)
+
     try:
         overlay.run()
     finally:

@@ -780,3 +780,363 @@ def _is_descendant(widget, parent) -> bool:
         except Exception:
             return False
     return False
+
+
+# ── ONNX Inference Viewer Window ──────────────────────────────────────────────
+
+_ONNX_BG      = "#06090f"
+_ONNX_PANEL   = "#0d1424"
+_ONNX_BORDER  = "#1e2d45"
+_ONNX_ACCENT  = "#38bdf8"
+_ONNX_GREEN   = "#4ade80"
+_ONNX_YELLOW  = "#fbbf24"
+_ONNX_RED     = "#f87171"
+_ONNX_TEXT    = "#e2e8f0"
+_ONNX_SUB     = "#64748b"
+_ONNX_WARM    = "#f59e0b"
+
+# (key, label, higher_is_better)
+_ONNX_GAUGES = [
+    ("attention_residue",  "Attention Residue",   False),
+    ("pre_error_prob",     "Pre-Error Prob",       False),
+    ("interruptibility",   "Interruptibility",     True),
+    ("capsule_trigger",    "Capsule Trigger",       False),
+    ("confusion_friction", "Confusion Friction",   False),
+    ("personal_deviation", "Personal Deviation",   False),
+]
+
+_STRUGGLE_COLORS = {
+    "productive": _ONNX_GREEN,
+    "harmful":    _ONNX_RED,
+    "neutral":    _ONNX_YELLOW,
+}
+
+_STATE_COLORS = {
+    "focused":  _ONNX_GREEN,
+    "confused": _ONNX_YELLOW,
+    "fatigued": _ONNX_RED,
+}
+
+
+class ONNXViewerWindow:
+    """
+    A separate Tk Toplevel window giving a live, real-time view of what
+    the FlowGuardian ONNX inference engine is producing.
+
+    Layout
+    ──────
+    ┌────────────────────────────────────┐
+    │  🤖 ONNX Flow Guardian             │
+    │  ● COGNITIVE STATE  focused  95%   │
+    │  Struggle type: productive         │
+    ├── Output Scores ───────────────────┤
+    │  [Attention Residue]  ██░░░░  23%  │
+    │  [Pre-Error Prob]     ████░░  61%  │
+    │  …                                 │
+    ├── Input Features ──────────────────┤
+    │  iki_mean_ms=210  wpm=48  …        │
+    ├── Inference Log ────────────────────┤
+    │  00:12:34  focused  res=0.23 …     │
+    │  00:12:04  focused  res=0.21 …     │
+    └────────────────────────────────────┘
+    """
+
+    _GAUGE_W   = 200
+    _GAUGE_H   = 12
+    _LOG_LINES = 20
+
+    def __init__(self, parent: tk.Tk, payload_provider, refresh_ms: int = 500) -> None:
+        self.payload_provider = payload_provider
+        self.refresh_ms       = refresh_ms
+        self._log: list[str]  = []
+
+        self.win = tk.Toplevel(parent)
+        self.win.title("ONNX Inference Viewer — Flow Guardian")
+        self.win.configure(bg=_ONNX_BG)
+        self.win.attributes("-topmost", True)
+        self.win.attributes("-alpha", 0.96)
+        self.win.resizable(True, True)
+
+        sw = self.win.winfo_screenwidth()
+        w, h = 520, 760
+        # Place to the LEFT of the main overlay (which sits at screen-right)
+        self.win.geometry(f"{w}x{h}+{max(sw - w - 700, 0)}+20")
+
+        self._build_ui()
+        self._schedule_refresh()
+
+    # ── UI construction ───────────────────────────────────────────────────────
+
+    def _build_ui(self) -> None:
+        outer = tk.Frame(self.win, bg=_ONNX_BG, padx=14, pady=10)
+        outer.pack(fill="both", expand=True)
+
+        # ── Header ────────────────────────────────────────────────────────
+        hdr = tk.Frame(outer, bg=_ONNX_BG)
+        hdr.pack(fill="x", pady=(0, 8))
+        tk.Label(
+            hdr, text="🤖  ONNX Inference Viewer",
+            font=("Segoe UI", 12, "bold"), bg=_ONNX_BG, fg=_ONNX_TEXT, anchor="w",
+        ).pack(side="left", fill="x", expand=True)
+        tk.Button(
+            hdr, text="✕", command=self.win.destroy,
+            font=("Segoe UI", 10, "bold"), bg="#1e1e2e", fg=_ONNX_TEXT,
+            activebackground="#7f1d1d", activeforeground="#f8fafc",
+            bd=0, padx=10, pady=2, cursor="hand2",
+        ).pack(side="right")
+
+        # ── Scrollable body ───────────────────────────────────────────────
+        vp = tk.Frame(outer, bg=_ONNX_BG)
+        vp.pack(fill="both", expand=True)
+
+        self._canvas = tk.Canvas(vp, bg=_ONNX_BG, highlightthickness=0, bd=0)
+        self._canvas.pack(side="left", fill="both", expand=True)
+        vsb = tk.Scrollbar(vp, orient="vertical", command=self._canvas.yview)
+        vsb.pack(side="right", fill="y")
+        self._canvas.configure(yscrollcommand=vsb.set)
+
+        self._body = tk.Frame(self._canvas, bg=_ONNX_BG)
+        self._canvas.create_window((0, 0), window=self._body, anchor="nw")
+        self._body.bind(
+            "<Configure>",
+            lambda _e: self._canvas.configure(scrollregion=self._canvas.bbox("all")),
+        )
+        self._canvas.bind("<MouseWheel>",
+            lambda e: self._canvas.yview_scroll(int(-e.delta / 120), "units"))
+
+        # ── Status banner ─────────────────────────────────────────────────
+        self._banner = tk.Label(
+            self._body,
+            text="⏳  Warming up — waiting for 5 context windows…",
+            font=("Segoe UI", 10, "bold"),
+            bg=_ONNX_WARM, fg="#1c1007",
+            anchor="w", padx=10, pady=5,
+        )
+        self._banner.pack(fill="x", pady=(0, 6))
+
+        # ── Cognitive state pill ─────────────────────────────────────────
+        self._mk_section("🧠  Cognitive State Output")
+        state_row = tk.Frame(self._body, bg=_ONNX_PANEL, pady=8, padx=12)
+        state_row.pack(fill="x", pady=(0, 2))
+        self._lbl_state = tk.Label(
+            state_row,
+            text="— Awaiting inference",
+            font=("Segoe UI", 18, "bold"),
+            bg=_ONNX_PANEL, fg=_ONNX_ACCENT, anchor="w",
+        )
+        self._lbl_state.pack(side="left")
+        self._lbl_struggle = tk.Label(
+            state_row,
+            text="",
+            font=("Segoe UI", 10),
+            bg=_ONNX_PANEL, fg=_ONNX_SUB, anchor="e",
+        )
+        self._lbl_struggle.pack(side="right")
+
+        # Context: windows collected
+        self._lbl_context = tk.Label(
+            self._body,
+            text="Context windows: 0/5  |  Last inference: —",
+            font=("Consolas", 9), bg=_ONNX_BG, fg=_ONNX_SUB, anchor="w",
+        )
+        self._lbl_context.pack(anchor="w", pady=(4, 8), padx=2)
+
+        # ── Output score gauges ───────────────────────────────────────────
+        self._mk_section("📊  Model Output Scores")
+        self._gauge_canvases: dict[str, tk.Canvas] = {}
+        self._gauge_vals:     dict[str, tk.Label]  = {}
+
+        for key, label, higher_good in _ONNX_GAUGES:
+            row = tk.Frame(self._body, bg=_ONNX_BG)
+            row.pack(fill="x", pady=2)
+            direction = "▲ higher better" if higher_good else "▼ lower better"
+            tk.Label(
+                row, text=label, width=20, anchor="w",
+                font=("Segoe UI", 9), bg=_ONNX_BG, fg=_ONNX_TEXT,
+            ).pack(side="left")
+            cvs = tk.Canvas(
+                row, width=self._GAUGE_W, height=self._GAUGE_H,
+                bg=_ONNX_BORDER, highlightthickness=0, bd=0,
+            )
+            cvs.pack(side="left", padx=(4, 6))
+            val_lbl = tk.Label(
+                row, text=" —%", width=6, anchor="w",
+                font=("Consolas", 9), bg=_ONNX_BG, fg=_ONNX_TEXT,
+            )
+            val_lbl.pack(side="left")
+            tk.Label(
+                row, text=direction, anchor="w",
+                font=("Segoe UI", 8), bg=_ONNX_BG, fg=_ONNX_SUB,
+            ).pack(side="left", padx=(4, 0))
+            self._gauge_canvases[key] = cvs
+            self._gauge_vals[key]     = val_lbl
+
+        # ── Input features ────────────────────────────────────────────────
+        self._mk_section("🔎  Input Features (Last Window)")
+        self._lbl_features = tk.Label(
+            self._body,
+            text="— Waiting for first inference…",
+            font=("Consolas", 8), bg=_ONNX_BG, fg=_ONNX_SUB,
+            anchor="w", justify="left", wraplength=480,
+        )
+        self._lbl_features.pack(anchor="w", fill="x", padx=2)
+
+        # ── Inference log ─────────────────────────────────────────────────
+        self._mk_section(f"📋  Inference Log (last {self._LOG_LINES})")
+        self._log_text = tk.Text(
+            self._body,
+            font=("Consolas", 8),
+            bg=_ONNX_PANEL, fg=_ONNX_TEXT,
+            relief="flat", bd=0,
+            height=self._LOG_LINES,
+            state="disabled",
+            wrap="word",
+        )
+        self._log_text.pack(fill="x", padx=2, pady=(0, 6))
+        self._log_text.tag_configure("focused",  foreground=_ONNX_GREEN)
+        self._log_text.tag_configure("confused",  foreground=_ONNX_YELLOW)
+        self._log_text.tag_configure("fatigued",  foreground=_ONNX_RED)
+        self._log_text.tag_configure("warmup",    foreground=_ONNX_WARM)
+        self._log_text.tag_configure("ts",        foreground=_ONNX_SUB)
+
+    # ── Section helper ────────────────────────────────────────────────────────
+
+    def _mk_section(self, title: str) -> None:
+        tk.Label(
+            self._body, text=title,
+            font=("Segoe UI", 9, "bold"), bg=_ONNX_BG, fg=_ONNX_ACCENT, anchor="w",
+        ).pack(anchor="w", pady=(10, 2), fill="x")
+        tk.Frame(self._body, bg=_ONNX_BORDER, height=1).pack(fill="x", pady=(0, 4))
+
+    # ── Refresh loop ──────────────────────────────────────────────────────────
+
+    def _schedule_refresh(self) -> None:
+        try:
+            self._refresh()
+        except Exception:
+            pass
+        self.win.after(self.refresh_ms, self._schedule_refresh)
+
+    def _refresh(self) -> None:
+        try:
+            snap = self.payload_provider()
+        except Exception:
+            return
+
+        ml_state   = snap.get("ml_state")
+        onnx_info  = snap.get("core_features", {}).get("onnx_inference", {})
+
+        engine_enabled = bool(onnx_info.get("enabled", False))
+        ml_ready       = bool(onnx_info.get("ready",   False))
+        ml_features    = onnx_info.get("features") or {}
+        age_s          = onnx_info.get("last_result_age_seconds")
+
+        # How many context windows have been gathered (infer from history length)
+        # We track via the inference engine's local counter via onnx_info
+        ctx_windows = 5 if ml_ready else (
+            len(ml_features) // 18 if ml_features else 0
+        )
+
+        # ── Banner & status ───────────────────────────────────────────────
+        if not engine_enabled:
+            self._banner.configure(
+                text="❌  ONNX Engine disabled — model file not found.",
+                bg=_ONNX_RED, fg="#0f0505",
+            )
+        elif not ml_ready:
+            self._banner.configure(
+                text="⏳  Warming up — collecting context windows (need 5×30s = 2.5 min)…",
+                bg=_ONNX_WARM, fg="#1c1007",
+            )
+        else:
+            self._banner.configure(
+                text="✅  ONNX Engine active — inference every 30 s",
+                bg="#14532d", fg="#f0fdf4",
+            )
+
+        age_str = f"{age_s:.0f}s ago" if isinstance(age_s, (int, float)) else "—"
+        self._lbl_context.configure(
+            text=(
+                f"Engine: {'ON' if engine_enabled else 'OFF'}  |  "
+                f"Ready: {'YES' if ml_ready else 'NO'}  |  "
+                f"Last inference: {age_str}"
+            )
+        )
+
+        # ── Cognitive state & struggle ────────────────────────────────────
+        if isinstance(ml_state, dict):
+            cog_state = str(ml_state.get("cognitive_state", "—"))
+            struggle  = str(ml_state.get("struggle_type",   "—"))
+            state_color = _STATE_COLORS.get(cog_state, _ONNX_ACCENT)
+            struggle_color = _STRUGGLE_COLORS.get(struggle, _ONNX_SUB)
+            self._lbl_state.configure(
+                text=f"  {cog_state.upper()}",
+                fg=state_color,
+                bg=_ONNX_PANEL,
+            )
+            self._lbl_struggle.configure(
+                text=f"Struggle: {struggle}  ",
+                fg=struggle_color,
+                bg=_ONNX_PANEL,
+            )
+            # ── Gauges ───────────────────────────────────────────────────
+            for key, _label, higher_good in _ONNX_GAUGES:
+                raw_val = ml_state.get(key)
+                if not isinstance(raw_val, (int, float)):
+                    continue
+                val   = float(raw_val)
+                pct   = int(val * 100)
+                fill  = int(val * self._GAUGE_W)
+                cvs   = self._gauge_canvases[key]
+                cvs.delete("all")
+                if fill > 0:
+                    if higher_good:
+                        color = _ONNX_GREEN if val >= 0.6 else (_ONNX_YELLOW if val >= 0.35 else _ONNX_RED)
+                    else:
+                        color = _ONNX_GREEN if val <= 0.35 else (_ONNX_YELLOW if val <= 0.60 else _ONNX_RED)
+                    cvs.create_rectangle(0, 0, fill, self._GAUGE_H, fill=color, outline="")
+                self._gauge_vals[key].configure(text=f"{pct:3d}%")
+
+            # ── Append to log ─────────────────────────────────────────────
+            import time as _time
+            ts = _time.strftime("%H:%M:%S")
+            log_line = (
+                f"{ts}  {cog_state:<10}  "
+                f"res={ml_state.get('attention_residue', 0):.3f}  "
+                f"err={ml_state.get('pre_error_prob', 0):.3f}  "
+                f"int={ml_state.get('interruptibility', 0):.3f}  "
+                f"frict={ml_state.get('confusion_friction', 0):.3f}  "
+                f"dev={ml_state.get('personal_deviation', 0):.3f}  "
+                f"str={struggle}"
+            )
+            if not self._log or self._log[-1] != log_line:
+                self._log.append(log_line)
+                self._log = self._log[-self._LOG_LINES:]
+                self._update_log(cog_state)
+
+        elif not ml_ready and engine_enabled:
+            self._lbl_state.configure(text="  Warming up…", fg=_ONNX_WARM, bg=_ONNX_PANEL)
+            self._lbl_struggle.configure(text="", bg=_ONNX_PANEL)
+
+        # ── Input features table ──────────────────────────────────────────
+        if ml_features:
+            feat_pairs = [
+                f"{k}={v:.1f}" for k, v in sorted(ml_features.items())
+            ]
+            # 3 per line
+            lines = []
+            for i in range(0, len(feat_pairs), 3):
+                lines.append("  " + "  |  ".join(feat_pairs[i:i+3]))
+            self._lbl_features.configure(text="\n".join(lines) or "—")
+
+    def _update_log(self, cog_state: str) -> None:
+        self._log_text.configure(state="normal")
+        self._log_text.delete("1.0", "end")
+        for line in reversed(self._log):
+            ts_end  = 8  # length of "HH:MM:SS"
+            ts_part = line[:ts_end]
+            rest    = line[ts_end:]
+            state_tag = cog_state if cog_state in ("focused", "confused", "fatigued") else ""
+            self._log_text.insert("end", ts_part, "ts")
+            self._log_text.insert("end", rest + "\n", state_tag)
+        self._log_text.configure(state="disabled")
