@@ -21,42 +21,41 @@ FEATURE_NAMES = (
     "perclos",
 )
 
+FEATURE_STD_FLOORS: dict[str, float] = {
+    "iki_mean": 0.04,
+    "iki_std": 0.04,
+    "error_rate": 0.02,
+    "burst_length": 0.75,
+    "cursor_speed": 25.0,
+    "path_linearity": 0.08,
+    "click_dwell": 0.03,
+    "idle_ratio": 0.03,
+    "perclos": 0.03,
+}
+
 # ---------------------------------------------------------------------------
 # Scoring weights per state — tuned to HCI research signatures
 # Higher weight = stronger signal for that state
 # ---------------------------------------------------------------------------
 FOCUSED_RULES: list[tuple[str, str, float, int]] = [
-    # (feature, direction, z_threshold, points)
-    ("iki_std",       "below", -0.5,  2),
-    ("path_linearity","above",  0.5,  2),
-    ("burst_length",  "above",  0.5,  2),
-    ("error_rate",    "below", -0.5,  1),
-    ("click_dwell",   "below", -0.5,  1),
-    ("idle_ratio",    "below", -0.5,  1),
+    ("iki_std",        "below", -0.5, 2),
+    ("path_linearity", "above",  0.5, 2),
+    ("burst_length",   "above",  0.5, 1),
 ]
 
 CONFUSED_RULES: list[tuple[str, str, float, int]] = [
-    ("iki_std",        "above",  1.5,  3),
-    ("path_linearity", "below", -1.5,  3),
-    ("error_rate",     "above",  1.0,  2),
-    ("click_dwell",    "above",  1.0,  2),
-    ("burst_length",   "below", -0.5,  1),
-    ("idle_ratio",     "above",  0.8,  1),
+    ("iki_std",        "above",  1.5, 2),
+    ("path_linearity", "below", -1.5, 2),
+    ("error_rate",     "above",  1.0, 1),
 ]
 
 FATIGUED_RULES: list[tuple[str, str, float, int]] = [
-    ("iki_mean",    "above",  1.5,  3),
-    ("error_rate",  "above",  1.5,  3),
-    ("idle_ratio",  "above",  1.5,  3),
-    ("cursor_speed","below", -1.0,  2),
-    ("click_dwell", "above",  1.0,  2),
-    ("iki_std",     "above",  0.8,  1),
+    ("iki_mean",   "above",  1.5, 2),
+    ("error_rate", "above",  1.5, 2),
+    ("idle_ratio", "above",  1.5, 2),
 ]
 
-# PERCLOS bonus points applied separately (not z-score based)
-PERCLOS_FATIGUE_BONUS   = 5   # perclos > 0.15
-PERCLOS_FATIGUE_LIGHT   = 2   # perclos > 0.08
-PERCLOS_CONFUSED_BONUS  = 1   # perclos > 0.05 (drowsy eyes = harder to focus = confusion-like)
+PERCLOS_FATIGUE_BONUS = 3
 
 
 # ---------------------------------------------------------------------------
@@ -237,12 +236,12 @@ class CognitiveStateClassifier:
     ) -> ClassificationResult:
         current_time = now if now is not None else time.time()
         elapsed      = current_time - self.started_at
-        progress     = clamp(elapsed / self.calibration_seconds)
+        progress     = 1.0 if self.calibration_seconds <= 0 else clamp(elapsed / self.calibration_seconds)
+        self._update_calibration(features)
+        min_samples = self._min_sample_count()
 
         # ---- Phase 1: calibration ----------------------------------------
-        if progress < 1.0:
-            self._update_calibration(features)
-            min_samples = self._min_sample_count()
+        if progress < 1.0 or min_samples < self.minimum_samples:
             result = ClassificationResult(
                 state                = "calibrating",
                 confidence           = 0.55 + 0.35 * progress,
@@ -268,7 +267,6 @@ class CognitiveStateClassifier:
             self._ewma_ready = True
 
         # ---- Phase 2: classify -------------------------------------------
-        self._update_ewma(features)
         z_scores   = self._compute_z_scores(features)
         scores, rule_hits = self._score_all_states(features, z_scores)
         raw_state  = self._pick_state(scores)
@@ -276,10 +274,10 @@ class CognitiveStateClassifier:
         # Temporal smoothing
         self._state_buffer.append(raw_state)
         smoothed_state = self._smooth_state()
+        self._update_ewma(features)
 
         confidence = self._compute_confidence(smoothed_state, scores, features)
         message    = self._build_message(smoothed_state, features, z_scores)
-        min_samples = self._min_sample_count()
 
         return ClassificationResult(
             state                = smoothed_state,
@@ -352,10 +350,11 @@ class CognitiveStateClassifier:
             if value is None:
                 continue
             stat = self._ewma_stats[name]
-            if not stat.initialised or stat.std < 1e-6:
+            std = max(stat.std, FEATURE_STD_FLOORS.get(name, 1e-3))
+            if not stat.initialised:
                 z[name] = 0.0
             else:
-                z[name] = (float(value) - stat.mean) / stat.std
+                z[name] = (float(value) - stat.mean) / std
         return z
 
     # ------------------------------------------------------------------
@@ -370,43 +369,38 @@ class CognitiveStateClassifier:
         confused_pts, confused_hits = _apply_rules(CONFUSED_RULES, z_scores)
         fatigued_pts, fatigued_hits = _apply_rules(FATIGUED_RULES, z_scores)
 
-        # PERCLOS bonus — camera is more reliable than typing when available
         if features.perclos is not None:
             if features.perclos > 0.15:
                 fatigued_pts += PERCLOS_FATIGUE_BONUS
-                fatigued_hits.append(f"PERCLOS={features.perclos:.3f} > 0.15 (+{PERCLOS_FATIGUE_BONUS})")
-            elif features.perclos > 0.08:
-                fatigued_pts += PERCLOS_FATIGUE_LIGHT
-                fatigued_hits.append(f"PERCLOS={features.perclos:.3f} > 0.08 (+{PERCLOS_FATIGUE_LIGHT})")
-            if features.perclos > 0.05:
-                confused_pts += PERCLOS_CONFUSED_BONUS
-                confused_hits.append(f"PERCLOS={features.perclos:.3f} > 0.05 (+{PERCLOS_CONFUSED_BONUS})")
+                fatigued_hits.append(
+                    f"PERCLOS={features.perclos:.3f} > 0.15 (+{PERCLOS_FATIGUE_BONUS})"
+                )
 
         scores    = {"focused": focused_pts, "confused": confused_pts, "fatigued": fatigued_pts}
         rule_hits = {"focused": focused_hits, "confused": confused_hits, "fatigued": fatigued_hits}
         return scores, rule_hits
 
-    @staticmethod
-    def _pick_state(scores: dict[str, int]) -> str:
+    def _pick_state(self, scores: dict[str, int]) -> str:
         """
         Pick the highest-scoring state.
-        Tie-break: confused > fatigued > focused
-        (confusion is the most actionable state for a hackathon demo)
+        If no rule fires, keep the last stable state when possible.
+        For ties, preserve the most recent state first, then prefer focused.
         """
         top_score = max(scores.values())
         if top_score <= 0:
-            return "focused"   # default when no signals fire
+            return self._state_buffer[-1] if self._state_buffer else "focused"
 
-        # Collect all states at the top score
         top_states = [state for state, pts in scores.items() if pts == top_score]
 
         if len(top_states) == 1:
             return top_states[0]
 
-        # Tie-break priority
-        for preferred in ("confused", "fatigued", "focused"):
-            if preferred in top_states:
-                return preferred
+        if self._state_buffer and self._state_buffer[-1] in top_states:
+            return self._state_buffer[-1]
+        if "focused" in top_states:
+            return "focused"
+        if "confused" in top_states:
+            return "confused"
         return top_states[0]
 
     def _smooth_state(self) -> str:
@@ -416,7 +410,14 @@ class CognitiveStateClassifier:
         counts: dict[str, int] = {}
         for s in self._state_buffer:
             counts[s] = counts.get(s, 0) + 1
-        return max(counts, key=lambda k: counts[k])
+        best_count = max(counts.values())
+        winners = [state for state, count in counts.items() if count == best_count]
+        if len(winners) == 1:
+            return winners[0]
+        for state in reversed(self._state_buffer):
+            if state in winners:
+                return state
+        return winners[0]
 
     # ------------------------------------------------------------------
     # Confidence
@@ -427,20 +428,18 @@ class CognitiveStateClassifier:
         scores: dict[str, int],
         features: FeatureVector,
     ) -> float:
-        top_score      = scores[state]
+        top_score      = scores.get(state, 0)
         other_max      = max((v for k, v in scores.items() if k != state), default=0)
         margin         = max(top_score - other_max, 0)
 
-        # Base: 0.50 floor, rises with score magnitude and margin
-        confidence = 0.50 + clamp(top_score / 14.0) * 0.30 + clamp(margin / 6.0) * 0.15
+        confidence = 0.45 + clamp(top_score / 7.0) * 0.30 + clamp(margin / 3.0) * 0.20
 
-        # Camera gives a hard boost when it agrees with the classification
         if features.perclos is not None and state == "fatigued" and features.perclos > 0.15:
             confidence += 0.10
-        if features.perclos is not None and state == "focused" and features.perclos < 0.05:
+        if features.perclos is not None and state == "focused" and features.perclos < 0.08:
             confidence += 0.05
 
-        return clamp(confidence, 0.50, 0.97)
+        return clamp(confidence, 0.45, 0.95)
 
     # ------------------------------------------------------------------
     # Human-readable messages
@@ -452,12 +451,15 @@ class CognitiveStateClassifier:
         z_scores: dict[str, float],
     ) -> str:
         if state == "focused":
-            rhythm_note = (
-                "Typing rhythm is consistent and pointer movement is purposeful."
-                if z_scores.get("iki_std", 0.0) < -0.3
-                else "Signals are within your focused baseline."
-            )
-            return rhythm_note
+            parts: list[str] = []
+            if z_scores.get("iki_std", 0.0) <= -0.5:
+                parts.append("stable typing rhythm")
+            if z_scores.get("path_linearity", 0.0) >= 0.5:
+                parts.append("purposeful pointer movement")
+            if z_scores.get("burst_length", 0.0) >= 0.5:
+                parts.append("longer typing bursts")
+            base = "Focused pattern detected"
+            return f"{base}: {', '.join(parts)}." if parts else f"{base}."
 
         if state == "confused":
             parts: list[str] = []
@@ -467,16 +469,13 @@ class CognitiveStateClassifier:
                 parts.append("wandering mouse path")
             if z_scores.get("error_rate", 0.0) > 1.0:
                 parts.append("elevated error rate")
-            if z_scores.get("click_dwell", 0.0) > 1.0:
-                parts.append("long hover hesitation")
             base = "Signals suggest confusion or exploration"
             return f"{base}: {', '.join(parts)}." if parts else f"{base}."
 
-        # fatigued
         if features.perclos is not None and features.perclos > 0.15:
             return (
-                f"Fatigue detected — eyes closed {int(features.perclos * 100)}% "
-                f"of the last 60 s (PERCLOS). Consider a break."
+                f"Fatigue detected: PERCLOS reached {int(features.perclos * 100)}% "
+                f"over the recent camera window."
             )
         parts = []
         if z_scores.get("iki_mean", 0.0) > 1.5:

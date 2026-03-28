@@ -234,12 +234,12 @@ class ActivityMonitor:
         self._confusion_episode_id:     str | None = None
 
         # ── Sub-monitors ──────────────────────────────────────────────────
-        self.cursor_monitor   = CursorMonitor(window_seconds=6.0,          event_callback=self.record_event)
+        self.cursor_monitor   = CursorMonitor(window_seconds=WINDOW_SECONDS, event_callback=self.record_event)
         self.keyboard_monitor = KeyboardMonitor(window_seconds=WINDOW_SECONDS, event_callback=self.record_event)
         self.camera_monitor   = CameraMonitor(window_seconds=settings.camera_window_seconds, event_callback=self.record_event)
         self.app_monitor      = AppMonitor(poll_interval=2.0,              event_callback=self.record_event)
         self.time_tracker     = TimeTracker()
-        self.classifier       = CognitiveStateClassifier(calibration_seconds=300.0, minimum_samples=20)
+        self.classifier       = CognitiveStateClassifier(calibration_seconds=90.0, minimum_samples=20)
 
     # ── Lifecycle ─────────────────────────────────────────────────────────────
     def start(self) -> None:
@@ -547,6 +547,7 @@ class ActivityMonitor:
             # SCREEN ALERT UPDATE
             # ══════════════════════════════════════════════════════════════
             state_label = _state_label(
+                attention_residue = attention_residue,
                 focus_depth      = focus_depth,
                 confusion_risk   = confusion_risk,
                 fatigue_risk     = fatigue_risk,
@@ -955,12 +956,23 @@ def _compute_idle_ratio(now, activity_timestamps, window_seconds):
         idle_time += tail
     return round(clamp(idle_time / window_seconds), 3)
 
-def _state_label(*, focus_depth, confusion_risk, fatigue_risk, classifier_state, perclos):
-    if perclos >= 0.18 or classifier_state == "fatigued" or fatigue_risk >= 0.60:
+def _state_label(*, attention_residue, focus_depth, confusion_risk, fatigue_risk, classifier_state, perclos):
+    if classifier_state == "calibrating":
+        return "calibrating"
+    if perclos >= 0.18 or classifier_state == "fatigued" or fatigue_risk >= 0.68:
         return "fatigued"
-    if focus_depth >= 0.62 and classifier_state == "focused":
-        return "deep_focus"
-    if confusion_risk >= 0.62 or classifier_state == "confused":
+    if classifier_state == "confused":
+        if confusion_risk >= 0.62:
+            return "harmful_confusion"
+        if confusion_risk >= 0.42:
+            return "productive_struggle"
+        return "confused"
+    if classifier_state == "focused":
+        if focus_depth >= 0.72 and attention_residue <= 0.32 and fatigue_risk <= 0.40:
+            return "deep_focus"
+        if focus_depth >= 0.55:
+            return "focused"
+    if confusion_risk >= 0.62:
         return "harmful_confusion"
     if confusion_risk >= 0.42:
         return "productive_struggle"
