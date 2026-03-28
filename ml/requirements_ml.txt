@@ -1,0 +1,22 @@
+# Flow Guardian — ML dependencies
+# Install these on the L40S training machine:
+#   pip install -r requirements_ml.txt
+
+# Core numerics
+numpy>=1.26.0
+pandas>=2.2.0
+
+# Deep learning (training — L40S only)
+torch>=2.2.0
+torchvision>=0.17.0
+
+# ONNX export (training machine) + inference (VivoBook)
+onnx>=1.16.0
+onnxruntime>=1.18.0          # CPU inference on VivoBook — no CUDA needed
+
+# Evaluation & visualization
+scikit-learn>=1.4.0           # confusion matrix, classification report
+matplotlib>=3.8.0             # loss / accuracy plots
+
+# Sentence embeddings for Recovery Capsule (22MB, fully offline)
+sentence-transformers>=2.7.0

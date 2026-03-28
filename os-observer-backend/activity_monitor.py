@@ -38,6 +38,7 @@ from classifier       import CognitiveStateClassifier, FeatureVector
 from cursor_monitor   import CursorMonitor
 from keyboard_monitor import KeyboardMonitor
 from time_tracker     import TimeTracker
+from onnx_inference   import FlowGuardianInference
 
 
 # ── Environment ───────────────────────────────────────────────────────────────
@@ -378,6 +379,16 @@ class ActivityMonitor:
         self._confusion_episode_id:     str | None = None
         self._last_baseline_persist_at: float = 0.0
         self._last_focus_context: dict[str, Any] | None = None
+
+        # --- ML Integration ---
+        try:
+            self.inference_engine = FlowGuardianInference()
+        except Exception as e:
+            print(f"Warning: ONNX Engine failed to load ({e}).")
+            self.inference_engine = None
+            
+        self.last_inference_time = 0.0
+        self.latest_ml_state = None
 
         # ── Sub-monitors ──────────────────────────────────────────────────
         self.cursor_monitor   = CursorMonitor(window_seconds=WINDOW_SECONDS, event_callback=self.record_event)
@@ -847,6 +858,48 @@ class ActivityMonitor:
             )
             idle_ratio = _compute_idle_ratio(now_ts, activity_timestamps, WINDOW_SECONDS)
 
+            # --- ML Inference Run (Every 5 seconds) ---
+            now = time.time()
+            if self.inference_engine and (now - self.last_inference_time) > 5.0:
+                self.last_inference_time = now
+                
+                try:
+                    c_feats = cursor.get("features")
+                    wpm = keyboard.get("wpm", 0)
+                    
+                    # Approximate inter-key interval
+                    iki_mean = (60000.0 / (wpm * 5.0)) if wpm > 0 else 250.0
+                    iki_mean = max(50.0, min(800.0, iki_mean))
+                    
+                    ml_features = {
+                        "iki_mean_ms": iki_mean,
+                        "iki_std_ms": 20.0, # Placeholder until detailed variance tracking
+                        "hold_mean_ms": 85.0, # Placeholder
+                        "backspace_ratio": keyboard.get("backspace_count", 0) / max(1, keyboard.get("total_keys", 1)),
+                        "burst_length": keyboard.get("total_keys", 0) / 2.0,
+                        "wpm": wpm,
+                        "mouse_speed_px_s": c_feats.average_speed if c_feats else 0.0,
+                        "path_linearity": getattr(c_feats, "path_linearity", 0.82) if c_feats else 0.82,
+                        "click_dwell_ms": getattr(c_feats, "click_dwell", 120.0) if c_feats else 120.0,
+                        "direction_changes": getattr(c_feats, "direction_changes", 0.0) if c_feats else 0.0,
+                        "idle_ratio": idle_ratio,
+                        "scroll_reversals": cursor.get("scroll_count", 0) / 2.0,
+                        "perclos": camera.get("perclos", 0.05) if camera and "perclos" in camera else 0.05,
+                        "blink_rate_per_min": camera.get("blink_rate_per_min", 17.0) if camera else 17.0,
+                        "ear_mean": 0.32,
+                        "app_switches": 0.0,
+                        "dwell_seconds": 180.0
+                    }
+                    
+                    ml_result = self.inference_engine.infer(ml_features)
+                    if ml_result:
+                        self.latest_ml_state = ml_result
+                        self.record_event(f"ML State inferred: {ml_result['cognitive_state'].capitalize()}")
+                        
+                except Exception as e:
+                    print(f"ML Inference Error: {e}")
+            # ----------------------------------------
+
             # ── Feature vector ────────────────────────────────────────────
             perclos = camera.get("perclos")
             features = FeatureVector(
@@ -1156,6 +1209,7 @@ class ActivityMonitor:
                 "idle_seconds":  idle_seconds,
                 "recent_events": recent_events,
                 "scores":        scores_payload,
+                "ml_state":      getattr(self, "latest_ml_state", None),
 
                 "artifact": {
                     "artifact_id":    artifact_id,
