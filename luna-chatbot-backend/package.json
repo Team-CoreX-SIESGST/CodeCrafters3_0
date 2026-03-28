@@ -1,0 +1,53 @@
+{
+  "name": "backend",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "nodemon src/server.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC",
+  "keywords": [],
+  "dependencies": {
+    "@google/genai": "^1.30.0",
+    "@google/generative-ai": "^0.24.1",
+    "@supabase/supabase-js": "^2.57.4",
+    "bcryptjs": "^3.0.2",
+    "chart.js": "^4.5.0",
+    "cors": "^2.8.5",
+    "dotenv": "^17.2.3",
+    "express": "^4.18.2",
+    "file-type": "^21.0.0",
+    "google-auth-library": "^10.4.0",
+    "jsonwebtoken": "^9.0.2",
+    "mammoth": "^1.11.0",
+    "multer": "^2.0.2",
+    "node-fetch": "^3.3.2",
+    "openai": "^5.22.0",
+    "pdf-lib": "^1.17.1",
+    "pdfjs-dist": "^5.4.149",
+    "uuid": "^9.0.0",
+    "xlsx": "^0.18.5",
+    "zod": "^3.25.76",
+    "zod-to-json-schema": "^3.25.0"
+  },
+  "devDependencies": {
+    "@mermaid-js/mermaid-cli": "^11.12.0",
+    "@types/multer": "^2.0.0",
+    "@types/xlsx": "^0.0.35",
+    "eslint": "^9.39.1",
+    "nodemon": "^2.0.22"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Satharva2004/assignment-backend.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Satharva2004/assignment-backend/issues"
+  },
+  "homepage": "https://github.com/Satharva2004/assignment-backend#readme",
+  "description": ""
+}

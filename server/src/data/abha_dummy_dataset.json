@@ -1,0 +1,1964 @@
+{
+  "patients": [
+    {
+      "abha_profile": {
+        "healthIdNumber": "12-3456-7890-0001",
+        "healthId": "gurpreet.kaur@abdm",
+        "name": "Gurpreet Kaur",
+        "firstName": "Gurpreet",
+        "middleName": "",
+        "lastName": "Kaur",
+        "gender": "F",
+        "dateOfBirth": "1990-06-15",
+        "yearOfBirth": "1990",
+        "monthOfBirth": "06",
+        "dayOfBirth": "15",
+        "mobile": "9876500001",
+        "email": "gurpreet.kaur@gmail.com",
+        "profilePhoto": null,
+        "kycPhoto": null,
+        "authMethods": ["AADHAAR_OTP", "MOBILE_OTP"],
+        "kycVerified": true,
+        "verificationStatus": "VERIFIED",
+        "verificationSource": "AADHAAR",
+        "abha_id_card":"https://res.cloudinary.com/dyqfiulc5/image/upload/v1773322314/Gemini_Generated_Image_j45b00j45b00j45b_xysoj5.png"
+      },
+      "address": {
+        "addressLine": "House No. 12, Near Gurudwara",
+        "village": "Barnala Khurd",
+        "subDistrict": "Nabha",
+        "district": "Patiala",
+        "state": "Punjab",
+        "pincode": "147201",
+        "country": "India"
+      },
+      "health_records": {
+        "bloodGroup": "B+",
+        "height_cm": 158,
+        "weight_kg": 54,
+        "bmi": 21.6,
+        "allergies": ["Penicillin"],
+        "chronicConditions": ["Anaemia"],
+        "disabilities": [],
+        "organDonor": false
+      },
+      "consultations": [
+        {
+          "consultationId": "CONS-2025-001",
+          "date": "2025-11-10",
+          "doctorName": "Dr. Rajinder Singh",
+          "doctorId": "DOC-0001",
+          "facility": "Nabha Civil Hospital",
+          "type": "IN_PERSON",
+          "chiefComplaint": "Weakness and dizziness",
+          "diagnosis": ["Iron Deficiency Anaemia"],
+          "vitals": {
+            "bp": "100/70 mmHg",
+            "pulse": 88,
+            "temperature_F": 98.4,
+            "spo2_percent": 97
+          },
+          "prescriptions": [
+            {
+              "medicine": "Ferrous Sulphate 200mg",
+              "dosage": "1 tablet",
+              "frequency": "twice daily",
+              "duration": "30 days",
+              "instructions": "Take after meals"
+            },
+            {
+              "medicine": "Folic Acid 5mg",
+              "dosage": "1 tablet",
+              "frequency": "once daily",
+              "duration": "30 days",
+              "instructions": "Take with water"
+            }
+          ],
+          "labTests": [
+            {
+              "testName": "CBC (Complete Blood Count)",
+              "result": "Hb: 8.2 g/dL (Low)",
+              "date": "2025-11-10",
+              "status": "COMPLETED"
+            }
+          ],
+          "followUpDate": "2025-12-10",
+          "notes": "Patient advised iron-rich diet. Review after 1 month."
+        }
+      ],
+      "insurance": {
+        "ayushmanBharat": true,
+        "policyNumber": "AB-PB-2025-001234",
+        "validTill": "2026-03-31"
+      },
+      "ashaWorker": {
+        "name": "Sunita Devi",
+        "contact": "9876500099",
+        "village": "Barnala Khurd"
+      }
+    },
+
+    {
+      "abha_profile": {
+        "healthIdNumber": "12-3456-7890-0002",
+        "healthId": "ranjit.singh@abdm",
+        "name": "Ranjit Singh",
+        "firstName": "Ranjit",
+        "middleName": "",
+        "lastName": "Singh",
+        "gender": "M",
+        "dateOfBirth": "1975-03-22",
+        "yearOfBirth": "1975",
+        "monthOfBirth": "03",
+        "dayOfBirth": "22",
+        "mobile": "9876500002",
+        "email": null,
+        "profilePhoto": null,
+        "kycPhoto": null,
+        "authMethods": ["MOBILE_OTP"],
+        "kycVerified": false,
+        "verificationStatus": "PENDING",
+        "verificationSource": "MOBILE",
+        "abha_id_card": "https://res.cloudinary.com/dyqfiulc5/image/upload/v1773323316/Gemini_Generated_Image_lrnfnqlrnfnqlrnf_hipx4g.png"
+      },
+      "address": {
+        "addressLine": "Ward No. 3, Farmer Colony",
+        "village": "Majra Khurd",
+        "subDistrict": "Nabha",
+        "district": "Patiala",
+        "state": "Punjab",
+        "pincode": "147202",
+        "country": "India"
+      },
+      "health_records": {
+        "bloodGroup": "O+",
+        "height_cm": 172,
+        "weight_kg": 80,
+        "bmi": 27.0,
+        "allergies": [],
+        "chronicConditions": ["Type 2 Diabetes", "Hypertension"],
+        "disabilities": [],
+        "organDonor": false
+      },
+      "consultations": [
+        {
+          "consultationId": "CONS-2025-002",
+          "date": "2025-12-01",
+          "doctorName": "Dr. Amrita Sharma",
+          "doctorId": "DOC-0002",
+          "facility": "Nabha Civil Hospital",
+          "type": "TELE_CONSULTATION",
+          "chiefComplaint": "Uncontrolled blood sugar, headache",
+          "diagnosis": ["Uncontrolled Type 2 Diabetes Mellitus", "Stage 1 Hypertension"],
+          "vitals": {
+            "bp": "148/92 mmHg",
+            "pulse": 82,
+            "temperature_F": 98.6,
+            "spo2_percent": 98,
+            "fasting_blood_sugar_mg_dl": 210
+          },
+          "prescriptions": [
+            {
+              "medicine": "Metformin 500mg",
+              "dosage": "1 tablet",
+              "frequency": "twice daily",
+              "duration": "90 days",
+              "instructions": "Take with meals"
+            },
+            {
+              "medicine": "Amlodipine 5mg",
+              "dosage": "1 tablet",
+              "frequency": "once daily",
+              "duration": "90 days",
+              "instructions": "Take in morning"
+            }
+          ],
+          "labTests": [
+            {
+              "testName": "HbA1c",
+              "result": "9.2% (High)",
+              "date": "2025-11-28",
+              "status": "COMPLETED"
+            },
+            {
+              "testName": "Fasting Blood Sugar",
+              "result": "210 mg/dL (High)",
+              "date": "2025-12-01",
+              "status": "COMPLETED"
+            }
+          ],
+          "followUpDate": "2026-01-01",
+          "notes": "Diabetic diet counselling given. Reduce carb intake, walk 30 mins daily."
+        }
+      ],
+      "insurance": {
+        "ayushmanBharat": true,
+        "policyNumber": "AB-PB-2025-002345",
+        "validTill": "2026-03-31"
+      },
+      "ashaWorker": {
+        "name": "Sunita Devi",
+        "contact": "9876500099",
+        "village": "Majra Khurd"
+      }
+    },
+
+    {
+      "abha_profile": {
+        "healthIdNumber": "12-3456-7890-0003",
+        "healthId": "sukhwinder.kaur@abdm",
+        "name": "Sukhwinder Kaur",
+        "firstName": "Sukhwinder",
+        "middleName": "",
+        "lastName": "Kaur",
+        "gender": "F",
+        "dateOfBirth": "1958-09-05",
+        "yearOfBirth": "1958",
+        "monthOfBirth": "09",
+        "dayOfBirth": "05",
+        "mobile": "9876500003",
+        "email": null,
+        "authMethods": ["MOBILE_OTP"],
+        "kycVerified": false,
+        "verificationStatus": "PENDING",
+        "verificationSource": "MOBILE",
+        "abha_id_card": ""
+      },
+      "address": {
+        "addressLine": "Old Village Road",
+        "village": "Chhajli",
+        "subDistrict": "Nabha",
+        "district": "Patiala",
+        "state": "Punjab",
+        "pincode": "147203",
+        "country": "India"
+      },
+      "health_records": {
+        "bloodGroup": "A+",
+        "height_cm": 152,
+        "weight_kg": 62,
+        "bmi": 26.8,
+        "allergies": ["Sulpha drugs"],
+        "chronicConditions": ["Osteoarthritis", "Hypothyroidism"],
+        "disabilities": ["Partial mobility impairment - knee"],
+        "organDonor": false
+      },
+      "consultations": [
+        {
+          "consultationId": "CONS-2025-003",
+          "date": "2026-01-15",
+          "doctorName": "Dr. Rajinder Singh",
+          "doctorId": "DOC-0001",
+          "facility": "Nabha Civil Hospital",
+          "type": "TELE_CONSULTATION",
+          "chiefComplaint": "Knee pain, swelling, difficulty walking",
+          "diagnosis": ["Osteoarthritis - Bilateral Knee"],
+          "vitals": {
+            "bp": "130/84 mmHg",
+            "pulse": 76,
+            "temperature_F": 98.2,
+            "spo2_percent": 97
+          },
+          "prescriptions": [
+            {
+              "medicine": "Diclofenac 50mg",
+              "dosage": "1 tablet",
+              "frequency": "twice daily",
+              "duration": "10 days",
+              "instructions": "After meals only. Avoid if stomach pain."
+            },
+            {
+              "medicine": "Pantoprazole 40mg",
+              "dosage": "1 tablet",
+              "frequency": "once daily",
+              "duration": "10 days",
+              "instructions": "Empty stomach, morning"
+            },
+            {
+              "medicine": "Calcium + Vitamin D3",
+              "dosage": "1 tablet",
+              "frequency": "once daily",
+              "duration": "60 days",
+              "instructions": "After dinner"
+            }
+          ],
+          "labTests": [],
+          "followUpDate": "2026-02-15",
+          "notes": "Physiotherapy recommended. Referred to orthopaedic specialist."
+        }
+      ],
+      "insurance": {
+        "ayushmanBharat": true,
+        "policyNumber": "AB-PB-2025-003456",
+        "validTill": "2026-03-31"
+      },
+      "ashaWorker": {
+        "name": "Rajwinder Kaur",
+        "contact": "9876500088",
+        "village": "Chhajli"
+      }
+    },
+
+    {
+      "abha_profile": {
+        "healthIdNumber": "12-3456-7890-0004",
+        "healthId": "baldev.kumar@abdm",
+        "name": "Baldev Kumar",
+        "firstName": "Baldev",
+        "middleName": "",
+        "lastName": "Kumar",
+        "gender": "M",
+        "dateOfBirth": "2015-04-10",
+        "yearOfBirth": "2015",
+        "monthOfBirth": "04",
+        "dayOfBirth": "10",
+        "mobile": "9876500004",
+        "email": null,
+        "authMethods": ["MOBILE_OTP"],
+        "kycVerified": false,
+        "verificationStatus": "PENDING",
+        "verificationSource": "MOBILE",
+        "abha_id_card": ""
+      },
+      "address": {
+        "addressLine": "Near Primary School",
+        "village": "Dhuri Kalan",
+        "subDistrict": "Nabha",
+        "district": "Patiala",
+        "state": "Punjab",
+        "pincode": "147205",
+        "country": "India"
+      },
+      "health_records": {
+        "bloodGroup": "B+",
+        "height_cm": 115,
+        "weight_kg": 20,
+        "bmi": 15.1,
+        "allergies": [],
+        "chronicConditions": [],
+        "disabilities": [],
+        "organDonor": false,
+        "vaccinationRecord": {
+          "BCG": "DONE",
+          "OPV": "DONE",
+          "DPT": "DONE",
+          "Hepatitis_B": "DONE",
+          "MMR": "DONE",
+          "JE": "DONE"
+        }
+      },
+      "consultations": [
+        {
+          "consultationId": "CONS-2026-001",
+          "date": "2026-02-03",
+          "doctorName": "Dr. Amrita Sharma",
+          "doctorId": "DOC-0002",
+          "facility": "Nabha Civil Hospital",
+          "type": "IN_PERSON",
+          "chiefComplaint": "Fever, cough, runny nose for 3 days",
+          "diagnosis": ["Acute Upper Respiratory Tract Infection"],
+          "vitals": {
+            "bp": null,
+            "pulse": 102,
+            "temperature_F": 101.2,
+            "spo2_percent": 98,
+            "weight_kg": 20
+          },
+          "prescriptions": [
+            {
+              "medicine": "Paracetamol Syrup 250mg/5ml",
+              "dosage": "5ml",
+              "frequency": "three times daily",
+              "duration": "5 days",
+              "instructions": "Give after meals"
+            },
+            {
+              "medicine": "Amoxicillin Syrup 125mg/5ml",
+              "dosage": "7.5ml",
+              "frequency": "three times daily",
+              "duration": "5 days",
+              "instructions": "Complete full course"
+            }
+          ],
+          "labTests": [],
+          "followUpDate": null,
+          "notes": "Advised warm fluids, steam inhalation. Return if fever persists beyond 5 days."
+        }
+      ],
+      "insurance": {
+        "ayushmanBharat": true,
+        "policyNumber": "AB-PB-2025-004567",
+        "validTill": "2026-03-31"
+      },
+      "ashaWorker": {
+        "name": "Harpreet Kaur",
+        "contact": "9876500077",
+        "village": "Dhuri Kalan"
+      }
+    },
+
+    {
+      "abha_profile": {
+        "healthIdNumber": "12-3456-7890-0005",
+        "healthId": "manjit.singh@abdm",
+        "name": "Manjit Singh",
+        "firstName": "Manjit",
+        "middleName": "",
+        "lastName": "Singh",
+        "gender": "M",
+        "dateOfBirth": "1988-12-30",
+        "yearOfBirth": "1988",
+        "monthOfBirth": "12",
+        "dayOfBirth": "30",
+        "mobile": "9876500005",
+        "email": "manjit88@yahoo.com",
+        "authMethods": ["AADHAAR_OTP", "MOBILE_OTP"],
+        "kycVerified": true,
+        "verificationStatus": "VERIFIED",
+        "verificationSource": "AADHAAR",
+        "abha_id_card": ""
+      },
+      "address": {
+        "addressLine": "Kisan Nagar, Near Panchayat Ghar",
+        "village": "Sadhuana",
+        "subDistrict": "Nabha",
+        "district": "Patiala",
+        "state": "Punjab",
+        "pincode": "147206",
+        "country": "India"
+      },
+      "health_records": {
+        "bloodGroup": "AB+",
+        "height_cm": 175,
+        "weight_kg": 78,
+        "bmi": 25.5,
+        "allergies": [],
+        "chronicConditions": [],
+        "disabilities": [],
+        "organDonor": true
+      },
+      "consultations": [
+        {
+          "consultationId": "CONS-2025-004",
+          "date": "2025-10-20",
+          "doctorName": "Dr. Rajinder Singh",
+          "doctorId": "DOC-0001",
+          "facility": "Nabha Civil Hospital",
+          "type": "IN_PERSON",
+          "chiefComplaint": "Back pain after lifting heavy load in farm",
+          "diagnosis": ["Lumbar Muscle Strain"],
+          "vitals": {
+            "bp": "120/80 mmHg",
+            "pulse": 78,
+            "temperature_F": 98.6,
+            "spo2_percent": 99
+          },
+          "prescriptions": [
+            {
+              "medicine": "Ibuprofen 400mg",
+              "dosage": "1 tablet",
+              "frequency": "three times daily",
+              "duration": "5 days",
+              "instructions": "After meals only"
+            },
+            {
+              "medicine": "Muscle relaxant - Thiocolchicoside 4mg",
+              "dosage": "1 tablet",
+              "frequency": "twice daily",
+              "duration": "5 days",
+              "instructions": "Avoid driving after taking"
+            }
+          ],
+          "labTests": [],
+          "followUpDate": null,
+          "notes": "Rest for 5 days. Hot fomentation. Avoid heavy lifting."
+        }
+      ],
+      "insurance": {
+        "ayushmanBharat": false,
+        "policyNumber": null,
+        "validTill": null
+      },
+      "ashaWorker": {
+        "name": "Kulwinder Kaur",
+        "contact": "9876500066",
+        "village": "Sadhuana"
+      }
+    },
+
+    {
+      "abha_profile": {
+        "healthIdNumber": "12-3456-7890-0006",
+        "healthId": "preeto.devi@abdm",
+        "name": "Preeto Devi",
+        "firstName": "Preeto",
+        "middleName": "",
+        "lastName": "Devi",
+        "gender": "F",
+        "dateOfBirth": "1995-07-14",
+        "yearOfBirth": "1995",
+        "monthOfBirth": "07",
+        "dayOfBirth": "14",
+        "mobile": "9876500006",
+        "email": null,
+        "authMethods": ["MOBILE_OTP"],
+        "kycVerified": false,
+        "verificationStatus": "PENDING",
+        "verificationSource": "MOBILE",
+        "abha_id_card": ""
+      },
+      "address": {
+        "addressLine": "Near Anganwadi Centre",
+        "village": "Fatehgarh Churian",
+        "subDistrict": "Nabha",
+        "district": "Patiala",
+        "state": "Punjab",
+        "pincode": "147207",
+        "country": "India"
+      },
+      "health_records": {
+        "bloodGroup": "O-",
+        "height_cm": 155,
+        "weight_kg": 58,
+        "bmi": 24.1,
+        "allergies": [],
+        "chronicConditions": [],
+        "disabilities": [],
+        "organDonor": false,
+        "pregnancyStatus": {
+          "isPregnant": true,
+          "weeksPregnant": 24,
+          "edd": "2026-06-20",
+          "lmp": "2025-12-20",
+          "gravida": 2,
+          "para": 1,
+          "highRisk": false
+        }
+      },
+      "consultations": [
+        {
+          "consultationId": "CONS-2026-002",
+          "date": "2026-01-25",
+          "doctorName": "Dr. Amrita Sharma",
+          "doctorId": "DOC-0002",
+          "facility": "Nabha Civil Hospital",
+          "type": "TELE_CONSULTATION",
+          "chiefComplaint": "Routine ANC checkup - 20 weeks",
+          "diagnosis": ["Normal pregnancy - 24 weeks"],
+          "vitals": {
+            "bp": "110/72 mmHg",
+            "pulse": 84,
+            "temperature_F": 98.4,
+            "spo2_percent": 98,
+            "weight_kg": 58,
+            "fundal_height_cm": 24
+          },
+          "prescriptions": [
+            {
+              "medicine": "Iron + Folic Acid tablet",
+              "dosage": "1 tablet",
+              "frequency": "once daily",
+              "duration": "Until delivery",
+              "instructions": "Take on empty stomach. Avoid tea/coffee for 1 hour after."
+            },
+            {
+              "medicine": "Calcium 500mg",
+              "dosage": "2 tablets",
+              "frequency": "twice daily",
+              "duration": "Until delivery",
+              "instructions": "After meals"
+            }
+          ],
+          "labTests": [
+            {
+              "testName": "Anomaly Scan (USG)",
+              "result": "Normal foetal development",
+              "date": "2026-01-20",
+              "status": "COMPLETED"
+            },
+            {
+              "testName": "Urine Routine",
+              "result": "Normal",
+              "date": "2026-01-25",
+              "status": "COMPLETED"
+            }
+          ],
+          "followUpDate": "2026-02-25",
+          "notes": "Next ANC due at 28 weeks. TT vaccination due."
+        }
+      ],
+      "insurance": {
+        "ayushmanBharat": true,
+        "policyNumber": "AB-PB-2025-006789",
+        "validTill": "2026-03-31"
+      },
+      "ashaWorker": {
+        "name": "Rajwinder Kaur",
+        "contact": "9876500088",
+        "village": "Fatehgarh Churian"
+      }
+    },
+
+    {
+      "abha_profile": {
+        "healthIdNumber": "12-3456-7890-0007",
+        "healthId": "harpal.singh@abdm",
+        "name": "Harpal Singh",
+        "firstName": "Harpal",
+        "middleName": "",
+        "lastName": "Singh",
+        "gender": "M",
+        "dateOfBirth": "1945-01-19",
+        "yearOfBirth": "1945",
+        "monthOfBirth": "01",
+        "dayOfBirth": "19",
+        "mobile": "9876500007",
+        "email": null,
+        "authMethods": ["MOBILE_OTP"],
+        "kycVerified": false,
+        "verificationStatus": "PENDING",
+        "verificationSource": "MOBILE",
+        "abha_id_card": ""
+      },
+      "address": {
+        "addressLine": "Old Haveli, Main Bazar",
+        "village": "Nabha Town",
+        "subDistrict": "Nabha",
+        "district": "Patiala",
+        "state": "Punjab",
+        "pincode": "147201",
+        "country": "India"
+      },
+      "health_records": {
+        "bloodGroup": "A+",
+        "height_cm": 165,
+        "weight_kg": 58,
+        "bmi": 21.3,
+        "allergies": ["Aspirin"],
+        "chronicConditions": ["COPD", "Hypertension", "Ischemic Heart Disease"],
+        "disabilities": ["Partial hearing loss"],
+        "organDonor": false
+      },
+      "consultations": [
+        {
+          "consultationId": "CONS-2026-003",
+          "date": "2026-02-10",
+          "doctorName": "Dr. Rajinder Singh",
+          "doctorId": "DOC-0001",
+          "facility": "Nabha Civil Hospital",
+          "type": "IN_PERSON",
+          "chiefComplaint": "Breathlessness, wheezing, worsening in cold weather",
+          "diagnosis": ["COPD Exacerbation", "Hypertension - Controlled"],
+          "vitals": {
+            "bp": "138/88 mmHg",
+            "pulse": 94,
+            "temperature_F": 98.8,
+            "spo2_percent": 92,
+            "respiratory_rate": 22
+          },
+          "prescriptions": [
+            {
+              "medicine": "Salbutamol Inhaler",
+              "dosage": "2 puffs",
+              "frequency": "as needed (max 4 times daily)",
+              "duration": "Ongoing",
+              "instructions": "Use spacer device. Rinse mouth after."
+            },
+            {
+              "medicine": "Budesonide + Formoterol Inhaler",
+              "dosage": "1 puff",
+              "frequency": "twice daily",
+              "duration": "Ongoing",
+              "instructions": "Do not stop without doctor advice"
+            },
+            {
+              "medicine": "Amlodipine 5mg",
+              "dosage": "1 tablet",
+              "frequency": "once daily",
+              "duration": "90 days",
+              "instructions": "Morning, after breakfast"
+            }
+          ],
+          "labTests": [
+            {
+              "testName": "Chest X-Ray",
+              "result": "Hyperinflation, no consolidation",
+              "date": "2026-02-10",
+              "status": "COMPLETED"
+            },
+            {
+              "testName": "SpO2 Monitoring",
+              "result": "92% on room air (Low)",
+              "date": "2026-02-10",
+              "status": "COMPLETED"
+            }
+          ],
+          "followUpDate": "2026-03-10",
+          "notes": "Avoid smoke exposure. Keep warm. Refer to pulmonologist if SpO2 drops below 90%."
+        }
+      ],
+      "insurance": {
+        "ayushmanBharat": true,
+        "policyNumber": "AB-PB-2025-007890",
+        "validTill": "2026-03-31"
+      },
+      "ashaWorker": {
+        "name": "Sunita Devi",
+        "contact": "9876500099",
+        "village": "Nabha Town"
+      }
+    },
+
+    {
+      "abha_profile": {
+        "healthIdNumber": "12-3456-7890-0008",
+        "healthId": "simran.kaur@abdm",
+        "name": "Simran Kaur",
+        "firstName": "Simran",
+        "middleName": "",
+        "lastName": "Kaur",
+        "gender": "F",
+        "dateOfBirth": "2020-08-25",
+        "yearOfBirth": "2020",
+        "monthOfBirth": "08",
+        "dayOfBirth": "25",
+        "mobile": "9876500008",
+        "email": null,
+        "authMethods": ["MOBILE_OTP"],
+        "kycVerified": false,
+        "verificationStatus": "PENDING",
+        "verificationSource": "MOBILE",
+        "abha_id_card": ""
+      },
+      "address": {
+        "addressLine": "Village Well Road",
+        "village": "Bhamian Kalan",
+        "subDistrict": "Nabha",
+        "district": "Patiala",
+        "state": "Punjab",
+        "pincode": "147210",
+        "country": "India"
+      },
+      "health_records": {
+        "bloodGroup": "O+",
+        "height_cm": 90,
+        "weight_kg": 12,
+        "bmi": 14.8,
+        "allergies": [],
+        "chronicConditions": ["Malnutrition (Grade 1)"],
+        "disabilities": [],
+        "organDonor": false,
+        "vaccinationRecord": {
+          "BCG": "DONE",
+          "OPV": "DONE",
+          "DPT": "DONE",
+          "Hepatitis_B": "DONE",
+          "MMR": "DONE",
+          "JE": "PENDING"
+        },
+        "nutritionStatus": "SAM"
+      },
+      "consultations": [
+        {
+          "consultationId": "CONS-2026-004",
+          "date": "2026-01-10",
+          "doctorName": "Dr. Amrita Sharma",
+          "doctorId": "DOC-0002",
+          "facility": "Nabha Civil Hospital",
+          "type": "TELE_CONSULTATION",
+          "chiefComplaint": "Poor weight gain, child not eating well",
+          "diagnosis": ["Severe Acute Malnutrition"],
+          "vitals": {
+            "bp": null,
+            "pulse": 110,
+            "temperature_F": 98.6,
+            "spo2_percent": 99,
+            "weight_kg": 12,
+            "muac_cm": 11.2
+          },
+          "prescriptions": [
+            {
+              "medicine": "Ready-to-Use Therapeutic Food (RUTF)",
+              "dosage": "3 sachets",
+              "frequency": "daily",
+              "duration": "8 weeks",
+              "instructions": "Give between meals. Do not mix with water."
+            },
+            {
+              "medicine": "Zinc 10mg",
+              "dosage": "1 tablet (crushed)",
+              "frequency": "once daily",
+              "duration": "14 days",
+              "instructions": "Mix with small amount of food"
+            }
+          ],
+          "labTests": [],
+          "followUpDate": "2026-02-10",
+          "notes": "Referred to NRC (Nutritional Rehabilitation Centre). ASHA to monitor weekly weight."
+        }
+      ],
+      "insurance": {
+        "ayushmanBharat": true,
+        "policyNumber": "AB-PB-2025-008901",
+        "validTill": "2026-03-31"
+      },
+      "ashaWorker": {
+        "name": "Harpreet Kaur",
+        "contact": "9876500077",
+        "village": "Bhamian Kalan"
+      }
+    },
+
+    {
+      "abha_profile": {
+        "healthIdNumber": "12-3456-7890-0009",
+        "healthId": "kuldeep.kumar@abdm",
+        "name": "Kuldeep Kumar",
+        "firstName": "Kuldeep",
+        "middleName": "",
+        "lastName": "Kumar",
+        "gender": "M",
+        "dateOfBirth": "1982-11-11",
+        "yearOfBirth": "1982",
+        "monthOfBirth": "11",
+        "dayOfBirth": "11",
+        "mobile": "9876500009",
+        "email": null,
+        "authMethods": ["MOBILE_OTP"],
+        "kycVerified": false,
+        "verificationStatus": "PENDING",
+        "verificationSource": "MOBILE",
+        "abha_id_card": ""
+      },
+      "address": {
+        "addressLine": "Near Bus Stand",
+        "village": "Kohar",
+        "subDistrict": "Nabha",
+        "district": "Patiala",
+        "state": "Punjab",
+        "pincode": "147212",
+        "country": "India"
+      },
+      "health_records": {
+        "bloodGroup": "B-",
+        "height_cm": 168,
+        "weight_kg": 52,
+        "bmi": 18.4,
+        "allergies": [],
+        "chronicConditions": ["Tuberculosis (on treatment)"],
+        "disabilities": [],
+        "organDonor": false
+      },
+      "consultations": [
+        {
+          "consultationId": "CONS-2025-005",
+          "date": "2025-09-01",
+          "doctorName": "Dr. Rajinder Singh",
+          "doctorId": "DOC-0001",
+          "facility": "Nabha Civil Hospital",
+          "type": "IN_PERSON",
+          "chiefComplaint": "Persistent cough for 3 weeks, blood in sputum, night sweats, weight loss",
+          "diagnosis": ["Pulmonary Tuberculosis - Category I"],
+          "vitals": {
+            "bp": "108/70 mmHg",
+            "pulse": 92,
+            "temperature_F": 99.8,
+            "spo2_percent": 95
+          },
+          "prescriptions": [
+            {
+              "medicine": "DOTS - Intensive Phase (HRZE)",
+              "dosage": "As per weight chart",
+              "frequency": "daily",
+              "duration": "2 months",
+              "instructions": "Directly Observed Treatment - ASHA to supervise"
+            },
+            {
+              "medicine": "DOTS - Continuation Phase (HR)",
+              "dosage": "As per weight chart",
+              "frequency": "daily",
+              "duration": "4 months",
+              "instructions": "Must complete full 6 months"
+            }
+          ],
+          "labTests": [
+            {
+              "testName": "Sputum AFB Smear",
+              "result": "Positive (3+)",
+              "date": "2025-08-30",
+              "status": "COMPLETED"
+            },
+            {
+              "testName": "Chest X-Ray",
+              "result": "Cavitary lesion right upper lobe",
+              "date": "2025-09-01",
+              "status": "COMPLETED"
+            }
+          ],
+          "followUpDate": "2025-11-01",
+          "notes": "Nikshay ID registered. Family screening done. ASHA supervising DOTS."
+        }
+      ],
+      "insurance": {
+        "ayushmanBharat": true,
+        "policyNumber": "AB-PB-2025-009012",
+        "validTill": "2026-03-31"
+      },
+      "ashaWorker": {
+        "name": "Kulwinder Kaur",
+        "contact": "9876500066",
+        "village": "Kohar"
+      }
+    },
+
+    {
+      "abha_profile": {
+        "healthIdNumber": "12-3456-7890-0011",
+        "healthId": "jaswant.singh@abdm",
+        "name": "Jaswant Singh",
+        "firstName": "Jaswant",
+        "middleName": "",
+        "lastName": "Singh",
+        "gender": "M",
+        "dateOfBirth": "1968-05-03",
+        "yearOfBirth": "1968",
+        "monthOfBirth": "05",
+        "dayOfBirth": "03",
+        "mobile": "9876500011",
+        "email": null,
+        "profilePhoto": null,
+        "kycPhoto": null,
+        "authMethods": ["MOBILE_OTP"],
+        "kycVerified": false,
+        "verificationStatus": "PENDING",
+        "verificationSource": "MOBILE",
+        "abha_id_card": ""
+      },
+      "address": {
+        "addressLine": "House No. 7, Khet Wali Gali",
+        "village": "Tibba Sultanpur",
+        "subDistrict": "Nabha",
+        "district": "Patiala",
+        "state": "Punjab",
+        "pincode": "147203",
+        "country": "India"
+      },
+      "health_records": {
+        "bloodGroup": "B+",
+        "height_cm": 170,
+        "weight_kg": 85,
+        "bmi": 29.4,
+        "allergies": [],
+        "chronicConditions": ["Type 2 Diabetes", "Hypertension", "Dyslipidaemia"],
+        "disabilities": [],
+        "organDonor": false
+      },
+      "consultations": [
+        {
+          "consultationId": "CONS-2026-006",
+          "date": "2026-01-18",
+          "doctorName": "Dr. Rajinder Singh",
+          "doctorId": "DOC-0001",
+          "facility": "Nabha Civil Hospital",
+          "type": "IN_PERSON",
+          "chiefComplaint": "Chest tightness on exertion, breathlessness climbing stairs, fatigue since 2 weeks",
+          "diagnosis": ["Suspected Ischaemic Heart Disease", "Uncontrolled Type 2 Diabetes", "Dyslipidaemia"],
+          "vitals": {
+            "bp": "158/96 mmHg",
+            "pulse": 88,
+            "temperature_F": 98.4,
+            "spo2_percent": 96,
+            "respiratory_rate": 18,
+            "weight_kg": 85,
+            "random_blood_sugar_mg_dl": 248
+          },
+          "prescriptions": [
+            {
+              "medicine": "Aspirin 75mg",
+              "dosage": "1 tablet",
+              "frequency": "once daily",
+              "duration": "Ongoing",
+              "instructions": "After breakfast"
+            },
+            {
+              "medicine": "Atorvastatin 40mg",
+              "dosage": "1 tablet",
+              "frequency": "once daily at night",
+              "duration": "Ongoing",
+              "instructions": "Take at bedtime"
+            },
+            {
+              "medicine": "Metformin 1000mg",
+              "dosage": "1 tablet",
+              "frequency": "twice daily",
+              "duration": "90 days",
+              "instructions": "With meals"
+            },
+            {
+              "medicine": "Telmisartan 40mg",
+              "dosage": "1 tablet",
+              "frequency": "once daily",
+              "duration": "90 days",
+              "instructions": "Morning, empty stomach"
+            }
+          ],
+          "labTests": [
+            {
+              "testName": "ECG (12-lead)",
+              "reportId": "RPT-ECG-2026-001",
+              "result": "ST depression in leads V4-V6, T-wave inversion in V5-V6",
+              "impression": "Changes suggestive of anterolateral ischaemia. Recommend urgent cardiology referral.",
+              "performedBy": "ECG Technician Gurmail Singh",
+              "date": "2026-01-18",
+              "status": "COMPLETED",
+              "reportUrl": "https://res.cloudinary.com/dyqfiulc5/image/upload/v1773320905/RPT-ECG-2026-001_ECG_JaswantSingh_1_hrheae_vhzr75.pdf"
+            },
+            {
+              "testName": "Fasting Lipid Profile",
+              "reportId": "RPT-LAB-2026-001",
+              "result": {
+                "totalCholesterol_mg_dl": 248,
+                "LDL_mg_dl": 168,
+                "HDL_mg_dl": 34,
+                "triglycerides_mg_dl": 290,
+                "VLDL_mg_dl": 58
+              },
+              "referenceRange": {
+                "totalCholesterol": "<200 mg/dL",
+                "LDL": "<100 mg/dL",
+                "HDL": ">40 mg/dL (Male)",
+                "triglycerides": "<150 mg/dL"
+              },
+              "impression": "Severely elevated LDL and triglycerides. HDL low. High cardiovascular risk.",
+              "performedBy": "Lab Technician Balvir Kaur",
+              "date": "2026-01-18",
+              "status": "COMPLETED",
+              "reportUrl": "https://res.cloudinary.com/dyqfiulc5/image/upload/v1773320970/RPT-LAB-2026-001_LipidProfile_JaswantSingh_geojns.pdf"
+            },
+            {
+              "testName": "HbA1c",
+              "reportId": "RPT-LAB-2026-002",
+              "result": "10.8%",
+              "referenceRange": "<7.0% (Controlled Diabetic)",
+              "impression": "Poorly controlled diabetes over past 3 months.",
+              "performedBy": "Lab Technician Balvir Kaur",
+              "date": "2026-01-18",
+              "status": "COMPLETED",
+              "reportUrl": "https://res.cloudinary.com/dyqfiulc5/image/upload/v1773321015/RPT-LAB-2026-002_HbA1c_JaswantSingh_pzg4md.pdf"
+            },
+            {
+              "testName": "Serum Creatinine",
+              "reportId": "RPT-LAB-2026-003",
+              "result": "1.4 mg/dL",
+              "referenceRange": "0.7 - 1.2 mg/dL (Male)",
+              "impression": "Mildly elevated. Early diabetic nephropathy suspected. Monitor.",
+              "performedBy": "Lab Technician Balvir Kaur",
+              "date": "2026-01-18",
+              "status": "COMPLETED",
+              "reportUrl": "https://res.cloudinary.com/dyqfiulc5/image/upload/v1773321068/RPT-LAB-2026-003_RenalFunction_JaswantSingh_fguwol.pdf"
+            }
+          ],
+          "followUpDate": "2026-02-18",
+          "referral": {
+            "referredTo": "Cardiology OPD, Rajindra Hospital, Patiala",
+            "urgency": "URGENT - within 7 days",
+            "reason": "ECG changes suggestive of ischaemia. 2D Echo and Treadmill Test recommended."
+          },
+          "notes": "High-risk patient. Strict diabetic and salt-restricted diet. No heavy farm work until cardiac evaluation. Abstain from smoking/alcohol."
+        }
+      ],
+      "insurance": {
+        "ayushmanBharat": true,
+        "policyNumber": "AB-PB-2025-011234",
+        "validTill": "2026-03-31"
+      },
+      "ashaWorker": {
+        "name": "Kulwinder Kaur",
+        "contact": "9876500066",
+        "village": "Tibba Sultanpur"
+      }
+    },
+
+    {
+      "abha_profile": {
+        "healthIdNumber": "12-3456-7890-0012",
+        "healthId": "navneet.kaur@abdm",
+        "name": "Navneet Kaur",
+        "firstName": "Navneet",
+        "middleName": "",
+        "lastName": "Kaur",
+        "gender": "F",
+        "dateOfBirth": "1997-08-19",
+        "yearOfBirth": "1997",
+        "monthOfBirth": "08",
+        "dayOfBirth": "19",
+        "mobile": "9876500012",
+        "email": "navneet.k97@gmail.com",
+        "profilePhoto": null,
+        "kycPhoto": null,
+        "authMethods": ["AADHAAR_OTP", "MOBILE_OTP"],
+        "kycVerified": true,
+        "verificationStatus": "VERIFIED",
+        "verificationSource": "AADHAAR",
+        "abha_id_card": ""
+      },
+      "address": {
+        "addressLine": "Ward No. 5, Near Anganwadi",
+        "village": "Ghanaur",
+        "subDistrict": "Nabha",
+        "district": "Patiala",
+        "state": "Punjab",
+        "pincode": "147101",
+        "country": "India"
+      },
+      "health_records": {
+        "bloodGroup": "A+",
+        "height_cm": 160,
+        "weight_kg": 44,
+        "bmi": 17.2,
+        "allergies": [],
+        "chronicConditions": ["Hypothyroidism", "Polycystic Ovarian Syndrome (PCOS)"],
+        "disabilities": [],
+        "organDonor": false
+      },
+      "consultations": [
+        {
+          "consultationId": "CONS-2026-007",
+          "date": "2026-02-05",
+          "doctorName": "Dr. Amrita Sharma",
+          "doctorId": "DOC-0002",
+          "facility": "Nabha Civil Hospital",
+          "type": "TELE_CONSULTATION",
+          "chiefComplaint": "Irregular periods for 6 months, weight gain despite eating less, excess facial hair, hair fall",
+          "diagnosis": ["Polycystic Ovarian Syndrome (PCOS)", "Hypothyroidism - Subclinical"],
+          "vitals": {
+            "bp": "112/72 mmHg",
+            "pulse": 78,
+            "temperature_F": 98.4,
+            "spo2_percent": 99,
+            "weight_kg": 44,
+            "height_cm": 160
+          },
+          "prescriptions": [
+            {
+              "medicine": "Metformin 500mg",
+              "dosage": "1 tablet",
+              "frequency": "twice daily",
+              "duration": "90 days",
+              "instructions": "With meals. For insulin resistance in PCOS."
+            },
+            {
+              "medicine": "Levothyroxine 25mcg",
+              "dosage": "1 tablet",
+              "frequency": "once daily",
+              "duration": "90 days",
+              "instructions": "Empty stomach, 30 min before breakfast. Do not take with milk/antacids."
+            },
+            {
+              "medicine": "Inositol 2g sachet",
+              "dosage": "1 sachet",
+              "frequency": "once daily",
+              "duration": "90 days",
+              "instructions": "Dissolve in water, after dinner"
+            }
+          ],
+          "labTests": [
+            {
+              "testName": "Pelvic Ultrasound (USG)",
+              "reportId": "RPT-USG-2026-001",
+              "result": {
+                "uterus": "Normal size and echotexture",
+                "rightOvary": "Enlarged 4.2 x 3.1 cm, 14 follicles seen (pearl necklace sign)",
+                "leftOvary": "Enlarged 3.9 x 2.8 cm, 12 follicles seen",
+                "freeFluid": "Absent"
+              },
+              "impression": "Bilateral polycystic ovaries. Consistent with PCOS.",
+              "performedBy": "Dr. Amrita Sharma",
+              "date": "2026-01-28",
+              "status": "COMPLETED",
+              "reportUrl": "https://res.cloudinary.com/dyqfiulc5/image/upload/v1773321125/RPT-USG-2026-001_PelvicUSG_NavneetKaur_bdc4cr.pdf"
+            },
+            {
+              "testName": "Thyroid Function Test (TFT)",
+              "reportId": "RPT-LAB-2026-004",
+              "result": {
+                "TSH_mIU_L": 6.8,
+                "T3_ng_dL": 98,
+                "T4_ug_dL": 7.2,
+                "freeT4_ng_dL": 0.9
+              },
+              "referenceRange": {
+                "TSH": "0.4 - 4.0 mIU/L",
+                "T3": "80 - 200 ng/dL",
+                "T4": "5.0 - 12.0 ug/dL"
+              },
+              "impression": "TSH elevated - Subclinical hypothyroidism. T3/T4 within normal limits.",
+              "performedBy": "Lab Technician Balvir Kaur",
+              "date": "2026-02-01",
+              "status": "COMPLETED",
+              "reportUrl": "https://res.cloudinary.com/dyqfiulc5/image/upload/v1773321155/RPT-LAB-2026-004_ThyroidFunctionTest_NavneetKaur_ubesro.pdf"
+            },
+            {
+              "testName": "Hormonal Profile (LH/FSH/Testosterone)",
+              "reportId": "RPT-LAB-2026-005",
+              "result": {
+                "LH_mIU_mL": 14.2,
+                "FSH_mIU_mL": 5.1,
+                "LH_FSH_ratio": 2.78,
+                "totalTestosterone_ng_dL": 68,
+                "prolactin_ng_mL": 12.4
+              },
+              "referenceRange": {
+                "LH_FSH_ratio": "< 2 (normal female)",
+                "testosterone_female": "15-70 ng/dL"
+              },
+              "impression": "Elevated LH:FSH ratio (>2) consistent with PCOS. Borderline testosterone.",
+              "performedBy": "Lab Technician Balvir Kaur",
+              "date": "2026-02-01",
+              "status": "COMPLETED",
+              "reportUrl": "https://res.cloudinary.com/dyqfiulc5/image/upload/v1773321189/RPT-LAB-2026-005_HormonalProfile_NavneetKaur_klwhhh.pdf"
+            }
+          ],
+          "followUpDate": "2026-05-05",
+          "notes": "Low GI diet, exercise 45 min/day. Repeat TFT and USG at 3 months. Counselled on fertility implications. No current desire for pregnancy - management focused on cycle regulation."
+        }
+      ],
+      "insurance": {
+        "ayushmanBharat": false,
+        "policyNumber": null,
+        "validTill": null
+      },
+      "ashaWorker": {
+        "name": "Rajwinder Kaur",
+        "contact": "9876500088",
+        "village": "Ghanaur"
+      }
+    },
+
+    {
+      "abha_profile": {
+        "healthIdNumber": "12-3456-7890-0013",
+        "healthId": "gurmail.masih@abdm",
+        "name": "Gurmail Masih",
+        "firstName": "Gurmail",
+        "middleName": "",
+        "lastName": "Masih",
+        "gender": "M",
+        "dateOfBirth": "1952-03-14",
+        "yearOfBirth": "1952",
+        "monthOfBirth": "03",
+        "dayOfBirth": "14",
+        "mobile": "9876500013",
+        "email": null,
+        "profilePhoto": null,
+        "kycPhoto": null,
+        "authMethods": ["MOBILE_OTP"],
+        "kycVerified": false,
+        "verificationStatus": "PENDING",
+        "verificationSource": "MOBILE",
+        "abha_id_card": ""
+      },
+      "address": {
+        "addressLine": "Christian Colony, Near Church",
+        "village": "Nabha Town",
+        "subDistrict": "Nabha",
+        "district": "Patiala",
+        "state": "Punjab",
+        "pincode": "147201",
+        "country": "India"
+      },
+      "health_records": {
+        "bloodGroup": "O+",
+        "height_cm": 163,
+        "weight_kg": 49,
+        "bmi": 18.4,
+        "allergies": ["NSAIDs"],
+        "chronicConditions": ["Chronic Kidney Disease Stage 3", "Hypertension", "Type 2 Diabetes"],
+        "disabilities": [],
+        "organDonor": false
+      },
+      "consultations": [
+        {
+          "consultationId": "CONS-2025-007",
+          "date": "2025-11-22",
+          "doctorName": "Dr. Rajinder Singh",
+          "doctorId": "DOC-0001",
+          "facility": "Nabha Civil Hospital",
+          "type": "IN_PERSON",
+          "chiefComplaint": "Swelling in legs and feet, reduced urine output, extreme tiredness, nausea in mornings",
+          "diagnosis": ["Chronic Kidney Disease - Stage 3b", "Hypertension - Poorly Controlled", "Diabetic Nephropathy"],
+          "vitals": {
+            "bp": "162/100 mmHg",
+            "pulse": 80,
+            "temperature_F": 98.2,
+            "spo2_percent": 96,
+            "weight_kg": 49,
+            "pedal_oedema": "2+ bilateral"
+          },
+          "prescriptions": [
+            {
+              "medicine": "Telmisartan 80mg",
+              "dosage": "1 tablet",
+              "frequency": "once daily",
+              "duration": "90 days",
+              "instructions": "Morning. Protects kidneys in diabetes."
+            },
+            {
+              "medicine": "Furosemide 40mg",
+              "dosage": "1 tablet",
+              "frequency": "once daily morning",
+              "duration": "30 days",
+              "instructions": "Take in morning only. Monitor urine output."
+            },
+            {
+              "medicine": "Sodium Bicarbonate 500mg",
+              "dosage": "1 tablet",
+              "frequency": "twice daily",
+              "duration": "90 days",
+              "instructions": "For metabolic acidosis"
+            },
+            {
+              "medicine": "Erythropoietin 4000 IU injection",
+              "dosage": "4000 IU",
+              "frequency": "twice weekly",
+              "duration": "4 weeks",
+              "instructions": "Subcutaneous. ASHA to administer."
+            }
+          ],
+          "labTests": [
+            {
+              "testName": "Kidney Function Test (KFT)",
+              "reportId": "RPT-LAB-2025-001",
+              "result": {
+                "serumCreatinine_mg_dL": 2.8,
+                "BUN_mg_dL": 46,
+                "serumUricAcid_mg_dL": 8.2,
+                "eGFR_mL_min": 32,
+                "sodium_mEq_L": 138,
+                "potassium_mEq_L": 5.1,
+                "bicarbonate_mEq_L": 18
+              },
+              "referenceRange": {
+                "creatinine_male": "0.7 - 1.2 mg/dL",
+                "eGFR": ">60 mL/min (normal)",
+                "potassium": "3.5 - 5.0 mEq/L"
+              },
+              "impression": "eGFR 32 mL/min - CKD Stage 3b. Elevated creatinine and BUN. Mild hyperkalaemia. Metabolic acidosis.",
+              "performedBy": "Lab Technician Balvir Kaur",
+              "date": "2025-11-22",
+              "status": "COMPLETED",
+              "reportUrl": "https://res.cloudinary.com/dyqfiulc5/image/upload/v1773321234/RPT-LAB-2025-001_KidneyFunctionTest_GurMailMasih_zh99nw.pdf"
+            },
+            {
+              "testName": "Urine Routine & Microscopy",
+              "reportId": "RPT-LAB-2025-002",
+              "result": {
+                "protein": "3+ (Heavy proteinuria)",
+                "glucose": "2+",
+                "RBC_hpf": "6-8",
+                "WBC_hpf": "2-4",
+                "casts": "Granular casts present"
+              },
+              "impression": "Significant proteinuria and granular casts - consistent with diabetic nephropathy.",
+              "performedBy": "Lab Technician Balvir Kaur",
+              "date": "2025-11-22",
+              "status": "COMPLETED",
+              "reportUrl": "https://res.cloudinary.com/dyqfiulc5/image/upload/v1773321258/RPT-LAB-2025-002_UrineRoutineMicroscopy_GurmailMasih_yvbaxt.pdf"
+            },
+            {
+              "testName": "Complete Blood Count (CBC)",
+              "reportId": "RPT-LAB-2025-003",
+              "result": {
+                "Hb_g_dL": 8.6,
+                "TLC_cells_cumm": 7200,
+                "platelets_lakh_cumm": 1.9,
+                "PCV_percent": 26,
+                "MCV_fL": 82
+              },
+              "referenceRange": {
+                "Hb_male": "13.5 - 17.5 g/dL",
+                "TLC": "4000 - 11000",
+                "platelets": "1.5 - 4.5 lakh/cumm"
+              },
+              "impression": "Moderate normocytic normochromic anaemia. Likely renal anaemia due to CKD.",
+              "performedBy": "Lab Technician Balvir Kaur",
+              "date": "2025-11-22",
+              "status": "COMPLETED",
+              "reportUrl": "https://res.cloudinary.com/dyqfiulc5/image/upload/v1773321282/RPT-LAB-2025-003_CBC_GurmailMasih_zte0lb.pdf"
+            },
+            {
+              "testName": "Renal Ultrasound",
+              "reportId": "RPT-USG-2025-001",
+              "result": {
+                "rightKidney_cm": "8.9 x 4.1",
+                "leftKidney_cm": "8.6 x 3.9",
+                "corticalThickness": "Reduced bilaterally",
+                "echogenicity": "Increased bilateral cortical echogenicity",
+                "calculi": "No calculi",
+                "hydronephrosis": "Absent"
+              },
+              "impression": "Bilateral small kidneys with increased echogenicity - consistent with chronic kidney disease.",
+              "performedBy": "Dr. Amrita Sharma",
+              "date": "2025-11-20",
+              "status": "COMPLETED",
+              "reportUrl": "https://res.cloudinary.com/dyqfiulc5/image/upload/v1773321305/RPT-USG-2025-001_RenalUSG_GurmailMasih_jn6flz.pdf"
+            }
+          ],
+          "followUpDate": "2025-12-22",
+          "referral": {
+            "referredTo": "Nephrology, PGIMER, Chandigarh",
+            "urgency": "Within 2 weeks",
+            "reason": "CKD Stage 3b with progression. Dialysis planning may be required."
+          },
+          "notes": "Strict low-protein, low-potassium, low-salt diet. NO NSAIDs ever. Fluid restriction 1.5L/day. Family counselled about CKD progression and possible dialysis in future."
+        }
+      ],
+      "insurance": {
+        "ayushmanBharat": true,
+        "policyNumber": "AB-PB-2025-013456",
+        "validTill": "2026-03-31"
+      },
+      "ashaWorker": {
+        "name": "Sunita Devi",
+        "contact": "9876500099",
+        "village": "Nabha Town"
+      }
+    },
+
+    {
+      "abha_profile": {
+        "healthIdNumber": "12-3456-7890-0014",
+        "healthId": "harkirat.kaur@abdm",
+        "name": "Harkirat Kaur",
+        "firstName": "Harkirat",
+        "middleName": "",
+        "lastName": "Kaur",
+        "gender": "F",
+        "dateOfBirth": "2017-11-08",
+        "yearOfBirth": "2017",
+        "monthOfBirth": "11",
+        "dayOfBirth": "08",
+        "mobile": "9876500014",
+        "email": null,
+        "profilePhoto": null,
+        "kycPhoto": null,
+        "authMethods": ["MOBILE_OTP"],
+        "kycVerified": false,
+        "verificationStatus": "PENDING",
+        "verificationSource": "MOBILE",
+        "abha_id_card": ""
+      },
+      "address": {
+        "addressLine": "Near Primary Health Centre",
+        "village": "Rajpura Road Village",
+        "subDistrict": "Nabha",
+        "district": "Patiala",
+        "state": "Punjab",
+        "pincode": "147201",
+        "country": "India"
+      },
+      "health_records": {
+        "bloodGroup": "A+",
+        "height_cm": 108,
+        "weight_kg": 16,
+        "bmi": 13.7,
+        "allergies": [],
+        "chronicConditions": ["Asthma"],
+        "disabilities": [],
+        "organDonor": false,
+        "vaccinationRecord": {
+          "BCG": "DONE",
+          "OPV": "DONE",
+          "DPT": "DONE",
+          "Hepatitis_B": "DONE",
+          "MMR": "DONE",
+          "JE": "DONE",
+          "Typhoid": "DONE"
+        }
+      },
+      "consultations": [
+        {
+          "consultationId": "CONS-2026-008",
+          "date": "2026-02-14",
+          "doctorName": "Dr. Amrita Sharma",
+          "doctorId": "DOC-0002",
+          "facility": "Nabha Civil Hospital",
+          "type": "TELE_CONSULTATION",
+          "chiefComplaint": "Sudden episode of severe breathlessness at night, wheezing, unable to complete sentences",
+          "diagnosis": ["Acute Severe Asthma Attack"],
+          "vitals": {
+            "bp": null,
+            "pulse": 128,
+            "temperature_F": 99.2,
+            "spo2_percent": 88,
+            "respiratory_rate": 36,
+            "weight_kg": 16,
+            "peakFlowRate_L_min": 90
+          },
+          "prescriptions": [
+            {
+              "medicine": "Salbutamol Nebulisation 2.5mg",
+              "dosage": "2.5mg in 3ml NS",
+              "frequency": "every 20 minutes x 3 doses, then as needed",
+              "duration": "Acute episode",
+              "instructions": "Use nebuliser. Keep child calm. Sit upright."
+            },
+            {
+              "medicine": "Prednisolone 10mg",
+              "dosage": "1 tablet",
+              "frequency": "once daily",
+              "duration": "5 days",
+              "instructions": "After breakfast. Do not stop abruptly."
+            },
+            {
+              "medicine": "Montelukast 5mg (chewable)",
+              "dosage": "1 tablet",
+              "frequency": "once daily at bedtime",
+              "duration": "30 days",
+              "instructions": "For maintenance after acute phase"
+            },
+            {
+              "medicine": "Fluticasone Inhaler 50mcg",
+              "dosage": "2 puffs",
+              "frequency": "twice daily",
+              "duration": "Ongoing",
+              "instructions": "Use spacer. Rinse mouth after use."
+            }
+          ],
+          "labTests": [
+            {
+              "testName": "Chest X-Ray",
+              "reportId": "RPT-XRAY-2026-001",
+              "result": "Hyperinflated lung fields. No consolidation or pleural effusion. Flattened diaphragm.",
+              "impression": "Features consistent with acute asthma. No pneumonia.",
+              "performedBy": "Dr. Rajinder Singh",
+              "date": "2026-02-14",
+              "status": "COMPLETED",
+              "reportUrl": "https://res.cloudinary.com/dyqfiulc5/image/upload/v1773321345/RPT-XRAY-2026-001_ChestXRay_HarkiratKaur_y7obat.pdf"
+            },
+            {
+              "testName": "Arterial Blood Gas (ABG)",
+              "reportId": "RPT-LAB-2026-006",
+              "result": {
+                "pH": 7.34,
+                "pO2_mmHg": 58,
+                "pCO2_mmHg": 48,
+                "HCO3_mEq_L": 20,
+                "SaO2_percent": 88
+              },
+              "referenceRange": {
+                "pH": "7.35 - 7.45",
+                "pO2": "80 - 100 mmHg",
+                "pCO2": "35 - 45 mmHg"
+              },
+              "impression": "Hypoxaemia with mild hypercapnia. Respiratory acidosis. Severe attack requiring immediate treatment.",
+              "performedBy": "Lab Technician Balvir Kaur",
+              "date": "2026-02-14",
+              "status": "COMPLETED",
+              "reportUrl": "https://res.cloudinary.com/dyqfiulc5/image/upload/v1773321377/RPT-LAB-2026-006_ArterialBloodGas_HarkiratKaur_vdv8eb.pdf"
+            }
+          ],
+          "followUpDate": "2026-02-21",
+          "notes": "Emergency management initiated. SpO2 improved to 96% after 3 nebulisations. Advised admission but family refused. Parents educated on asthma triggers - dust, smoke, cold air. Asthma action plan given. Return IMMEDIATELY if breathing worsens."
+        }
+      ],
+      "insurance": {
+        "ayushmanBharat": true,
+        "policyNumber": "AB-PB-2025-014567",
+        "validTill": "2026-03-31"
+      },
+      "ashaWorker": {
+        "name": "Harpreet Kaur",
+        "contact": "9876500077",
+        "village": "Rajpura Road Village"
+      }
+    },
+
+    {
+      "abha_profile": {
+        "healthIdNumber": "12-3456-7890-0015",
+        "healthId": "darshan.lal@abdm",
+        "name": "Darshan Lal",
+        "firstName": "Darshan",
+        "middleName": "",
+        "lastName": "Lal",
+        "gender": "M",
+        "dateOfBirth": "1979-07-21",
+        "yearOfBirth": "1979",
+        "monthOfBirth": "07",
+        "dayOfBirth": "21",
+        "mobile": "9876500015",
+        "email": null,
+        "profilePhoto": null,
+        "kycPhoto": null,
+        "authMethods": ["MOBILE_OTP"],
+        "kycVerified": false,
+        "verificationStatus": "PENDING",
+        "verificationSource": "MOBILE",
+        "abha_id_card": ""
+      },
+      "address": {
+        "addressLine": "Mazdoor Basti, Near Chakki",
+        "village": "Sirhind Road Dhakoli",
+        "subDistrict": "Nabha",
+        "district": "Patiala",
+        "state": "Punjab",
+        "pincode": "147201",
+        "country": "India"
+      },
+      "health_records": {
+        "bloodGroup": "B+",
+        "height_cm": 167,
+        "weight_kg": 61,
+        "bmi": 21.9,
+        "allergies": [],
+        "chronicConditions": [],
+        "disabilities": ["Right hand index finger amputation (occupational injury 2019)"],
+        "organDonor": false
+      },
+      "consultations": [
+        {
+          "consultationId": "CONS-2026-009",
+          "date": "2026-03-05",
+          "doctorName": "Dr. Rajinder Singh",
+          "doctorId": "DOC-0001",
+          "facility": "Nabha Civil Hospital",
+          "type": "IN_PERSON",
+          "chiefComplaint": "High fever with chills for 5 days, severe headache, body ache, yellow eyes noticed by wife",
+          "diagnosis": ["Enteric Fever (Typhoid)", "Mild Jaundice - likely reactive hepatitis"],
+          "vitals": {
+            "bp": "104/68 mmHg",
+            "pulse": 74,
+            "temperature_F": 103.6,
+            "spo2_percent": 97,
+            "weight_kg": 61,
+            "tongue": "Coated",
+            "spleen": "Palpable 2 cm below costal margin"
+          },
+          "prescriptions": [
+            {
+              "medicine": "Ceftriaxone 2g IV",
+              "dosage": "2g in 100ml NS",
+              "frequency": "once daily IV",
+              "duration": "7 days",
+              "instructions": "Administered at hospital. Patient admitted in OPD ward."
+            },
+            {
+              "medicine": "Paracetamol 650mg",
+              "dosage": "1 tablet",
+              "frequency": "three times daily",
+              "duration": "7 days",
+              "instructions": "For fever. Do not exceed 4 tablets/day."
+            },
+            {
+              "medicine": "Ondansetron 4mg",
+              "dosage": "1 tablet",
+              "frequency": "twice daily",
+              "duration": "5 days",
+              "instructions": "For nausea, 30 min before meals"
+            },
+            {
+              "medicine": "Liv-52 (Hepatoprotective)",
+              "dosage": "2 tablets",
+              "frequency": "twice daily",
+              "duration": "30 days",
+              "instructions": "For liver support"
+            }
+          ],
+          "labTests": [
+            {
+              "testName": "Widal Test",
+              "reportId": "RPT-LAB-2026-007",
+              "result": {
+                "S_typhi_O": "1:160 (Positive)",
+                "S_typhi_H": "1:80 (Positive)",
+                "S_paratyphi_AO": "1:20 (Negative)",
+                "S_paratyphi_BH": "1:20 (Negative)"
+              },
+              "referenceRange": "Significant titre: >= 1:80 for O antigen",
+              "impression": "Significant titres for S. typhi O and H antigens. Consistent with active Enteric Fever (Typhoid).",
+              "performedBy": "Lab Technician Balvir Kaur",
+              "date": "2026-03-05",
+              "status": "COMPLETED",
+              "reportUrl": "https://res.cloudinary.com/dyqfiulc5/image/upload/v1773321429/RPT-LAB-2026-007_WidalTest_DarshanLal_wsrcpn.pdf"
+            },
+            {
+              "testName": "Liver Function Test (LFT)",
+              "reportId": "RPT-LAB-2026-008",
+              "result": {
+                "totalBilirubin_mg_dL": 2.8,
+                "directBilirubin_mg_dL": 1.9,
+                "indirectBilirubin_mg_dL": 0.9,
+                "SGOT_AST_IU_L": 88,
+                "SGPT_ALT_IU_L": 112,
+                "alkalinePhosphatase_IU_L": 145,
+                "totalProtein_g_dL": 6.2,
+                "albumin_g_dL": 3.1
+              },
+              "referenceRange": {
+                "totalBilirubin": "0.2 - 1.2 mg/dL",
+                "SGOT": "10 - 40 IU/L",
+                "SGPT": "7 - 56 IU/L"
+              },
+              "impression": "Elevated bilirubin and transaminases. Reactive hepatitis secondary to typhoid. No features of fulminant hepatic failure.",
+              "performedBy": "Lab Technician Balvir Kaur",
+              "date": "2026-03-05",
+              "status": "COMPLETED",
+              "reportUrl": "https://res.cloudinary.com/dyqfiulc5/image/upload/v1773321458/RPT-LAB-2026-008_LiverFunctionTest_DarshanLal_ui4nxg.pdf"
+            },
+            {
+              "testName": "Complete Blood Count (CBC)",
+              "reportId": "RPT-LAB-2026-009",
+              "result": {
+                "Hb_g_dL": 11.8,
+                "TLC_cells_cumm": 3200,
+                "platelets_lakh_cumm": 1.1,
+                "neutrophils_percent": 58,
+                "lymphocytes_percent": 38,
+                "eosinophils_percent": 2
+              },
+              "referenceRange": {
+                "TLC": "4000 - 11000",
+                "platelets": "1.5 - 4.5 lakh/cumm"
+              },
+              "impression": "Leucopenia (low WBC) - classic finding in typhoid. Thrombocytopenia - monitor closely for bleeding.",
+              "performedBy": "Lab Technician Balvir Kaur",
+              "date": "2026-03-05",
+              "status": "COMPLETED",
+              "reportUrl": "https://res.cloudinary.com/dyqfiulc5/image/upload/v1773321458/RPT-LAB-2026-008_LiverFunctionTest_DarshanLal_ui4nxg.pdf"
+            },
+            {
+              "testName": "Blood Culture & Sensitivity",
+              "reportId": "RPT-LAB-2026-010",
+              "result": "Salmonella typhi isolated. Sensitive to Ceftriaxone, Ciprofloxacin. Resistant to Ampicillin.",
+              "impression": "Confirmed Typhoid. Use Ceftriaxone as per sensitivity.",
+              "performedBy": "Lab Technician Balvir Kaur",
+              "date": "2026-03-07",
+              "status": "COMPLETED",
+              "reportUrl": "https://res.cloudinary.com/dyqfiulc5/image/upload/v1773321513/RPT-LAB-2026-010_BloodCulture_DarshanLal_rkblfb.pdf"
+            }
+          ],
+          "followUpDate": "2026-03-15",
+          "notes": "Patient responding to IV Ceftriaxone. Fever defervescing. Soft liquid diet only. Strict hand hygiene and sanitation. Family members advised OPD visit if they develop fever. Water purification advised - boil drinking water."
+        }
+      ],
+      "insurance": {
+        "ayushmanBharat": true,
+        "policyNumber": "AB-PB-2025-015678",
+        "validTill": "2026-03-31"
+      },
+      "ashaWorker": {
+        "name": "Kulwinder Kaur",
+        "contact": "9876500066",
+        "village": "Sirhind Road Dhakoli"
+      }
+    },
+
+    {
+      "abha_profile": {
+        "healthIdNumber": "12-4220-5313-8121",
+        "healthId": "12422053138121@abdm",
+        "name": "Asha Hanumant Bagde",
+        "firstName": "Asha",
+        "middleName": "Hanumant",
+        "lastName": "Bagde",
+        "gender": "F",
+        "dateOfBirth": "1962-12-06",
+        "yearOfBirth": "1962",
+        "monthOfBirth": "12",
+        "dayOfBirth": "06",
+        "mobile": "9967494352",
+        "email": null,
+        "profilePhoto": "abha_card_photo",
+        "kycPhoto": null,
+        "authMethods": ["AADHAAR_OTP", "MOBILE_OTP"],
+        "kycVerified": true,
+        "verificationStatus": "VERIFIED",
+        "verificationSource": "AADHAAR",
+        "abha_id_card": "https://res.cloudinary.com/dyqfiulc5/image/upload/v1773322471/Screenshot_2026-03-12_174208_vjifd2.png"
+      },
+      "address": {
+        "addressLine": "House No. 4, Near Gurudwara Sahib",
+        "village": "Nabha Town",
+        "subDistrict": "Nabha",
+        "district": "Patiala",
+        "state": "Punjab",
+        "pincode": "147201",
+        "country": "India"
+      },
+      "health_records": {
+        "bloodGroup": "O+",
+        "height_cm": 153,
+        "weight_kg": 68,
+        "bmi": 29.0,
+        "allergies": ["Sulpha drugs"],
+        "chronicConditions": ["Type 2 Diabetes Mellitus", "Hypertension", "Hypothyroidism", "Osteoporosis"],
+        "disabilities": [],
+        "organDonor": false
+      },
+      "consultations": [
+        {
+          "consultationId": "CONS-ASHA-2026-001",
+          "date": "2026-03-08",
+          "doctorName": "Dr. Amrita Sharma",
+          "doctorId": "DOC-0002",
+          "facility": "Nabha Civil Hospital",
+          "type": "TELE_CONSULTATION",
+          "chiefComplaint": "Fatigue, increased thirst, frequent urination, joint pains, cold intolerance, constipation for past 3 months",
+          "diagnosis": [
+            "Type 2 Diabetes Mellitus - Suboptimally Controlled",
+            "Stage 1 Hypertension",
+            "Hypothyroidism - on treatment",
+            "Osteoporosis - Post-menopausal"
+          ],
+          "vitals": {
+            "bp": "146/90 mmHg",
+            "pulse": 74,
+            "temperature_F": 98.2,
+            "spo2_percent": 97,
+            "weight_kg": 68,
+            "height_cm": 153,
+            "random_blood_sugar_mg_dl": 218
+          },
+          "prescriptions": [
+            {
+              "medicine": "Metformin 500mg",
+              "dosage": "1 tablet",
+              "frequency": "twice daily",
+              "duration": "90 days",
+              "instructions": "With meals. Do not skip."
+            },
+            {
+              "medicine": "Glimepiride 1mg",
+              "dosage": "1 tablet",
+              "frequency": "once daily before breakfast",
+              "duration": "90 days",
+              "instructions": "Take 15–30 min before first meal of the day."
+            },
+            {
+              "medicine": "Amlodipine 5mg",
+              "dosage": "1 tablet",
+              "frequency": "once daily",
+              "duration": "90 days",
+              "instructions": "Morning, after breakfast"
+            },
+            {
+              "medicine": "Levothyroxine 50mcg",
+              "dosage": "1 tablet",
+              "frequency": "once daily",
+              "duration": "180 days",
+              "instructions": "Empty stomach, 30 min before breakfast. Do not take with milk or antacids."
+            },
+            {
+              "medicine": "Calcium Carbonate 500mg + Vitamin D3 250IU",
+              "dosage": "1 tablet",
+              "frequency": "twice daily",
+              "duration": "180 days",
+              "instructions": "After meals"
+            },
+            {
+              "medicine": "Alendronate 70mg",
+              "dosage": "1 tablet",
+              "frequency": "once weekly (Sunday morning)",
+              "duration": "180 days",
+              "instructions": "Take with full glass of water. Sit upright for 30 min after. Do not eat for 30 min."
+            }
+          ],
+          "labTests": [
+            {
+              "testName": "HbA1c",
+              "reportId": "RPT-ASHA-LAB-001",
+              "result": "8.4%",
+              "referenceRange": "< 7.0% (Controlled Diabetic)",
+              "impression": "Suboptimally controlled diabetes. Intensification of therapy required.",
+              "performedBy": "Lab Technician Balvir Kaur",
+              "date": "2026-03-06",
+              "status": "COMPLETED",
+              "reportUrl": "https://res.cloudinary.com/dyqfiulc5/image/upload/v1773321551/RPT-ASHA-DEXA-001_DEXAScan_AshaHanumantBagde_lmxovv.pdf"
+            },
+            {
+              "testName": "Thyroid Function Test (TFT)",
+              "reportId": "RPT-ASHA-LAB-002",
+              "result": {
+                "TSH_mIU_L": 7.2,
+                "T3_ng_dL": 88,
+                "T4_ug_dL": 6.8,
+                "freeT4_ng_dL": 0.85
+              },
+              "referenceRange": {
+                "TSH": "0.4 – 4.0 mIU/L",
+                "T3": "80 – 200 ng/dL",
+                "T4": "5.0 – 12.0 ug/dL"
+              },
+              "impression": "Elevated TSH (7.2) with low-normal FT4. Under-replaced hypothyroidism. Levothyroxine dose adjustment required.",
+              "performedBy": "Lab Technician Balvir Kaur",
+              "date": "2026-03-06",
+              "status": "COMPLETED",
+              "reportUrl": "https://res.cloudinary.com/dyqfiulc5/image/upload/v1773321571/RPT-ASHA-LAB-001_HbA1c_AshaHanumantBagde_vvho9m.pdf"
+            },
+            {
+              "testName": "DEXA Scan — Bone Mineral Density",
+              "reportId": "RPT-ASHA-DEXA-001",
+              "result": {
+                "lumbarSpine_BMD_g_cm2": 0.721,
+                "lumbarSpine_Tscore": -2.8,
+                "leftHip_BMD_g_cm2": 0.698,
+                "leftHip_Tscore": -2.6,
+                "leftFemoralNeck_Tscore": -2.7
+              },
+              "referenceRange": {
+                "Tscore_normal": "> -1.0",
+                "Tscore_osteopenia": "-1.0 to -2.5",
+                "Tscore_osteoporosis": "< -2.5"
+              },
+              "impression": "T-scores < -2.5 at both lumbar spine (-2.8) and left hip (-2.6). Consistent with OSTEOPOROSIS. High fracture risk. Anti-resorptive therapy (Alendronate) initiated.",
+              "performedBy": "Dr. Amrita Sharma",
+              "date": "2026-02-20",
+              "status": "COMPLETED",
+              "reportUrl": "https://res.cloudinary.com/dyqfiulc5/image/upload/v1773321597/RPT-ASHA-LAB-002_TFT_AshaHanumantBagde_q5hnla.pdf"
+            }
+          ],
+          "followUpDate": "2026-06-08",
+          "notes": "Patient is 63-year-old post-menopausal woman managing 4 chronic conditions. Counselled on diet (low sugar, low salt, high calcium), weight reduction, and daily 30-min walk. ABHA card verified and records updated. Tele-consultation conducted successfully via ASHA worker assistance."
+        }
+      ],
+      "insurance": {
+        "ayushmanBharat": true,
+        "policyNumber": "AB-MH-2025-422053138121",
+        "validTill": "2026-03-31"
+      },
+      "ashaWorker": {
+        "name": "Sunita Devi",
+        "contact": "9876500099",
+        "village": "Nabha Town"
+      }
+    }
+  ],
+
+  "doctors": [
+    {
+      "doctorId": "DOC-0001",
+      "name": "Dr. Rajinder Singh",
+      "specialization": "General Medicine",
+      "qualification": "MBBS, MD",
+      "registrationNumber": "PB-MCI-12345",
+      "facility": "Nabha Civil Hospital",
+      "availableDays": ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"],
+      "consultationHours": "09:00 - 14:00",
+      "telemedicineAvailable": true,
+      "languages": ["Punjabi", "Hindi"]
+    },
+    {
+      "doctorId": "DOC-0002",
+      "name": "Dr. Amrita Sharma",
+      "specialization": "Obstetrics & Gynaecology",
+      "qualification": "MBBS, MS (OBG)",
+      "registrationNumber": "PB-MCI-23456",
+      "facility": "Nabha Civil Hospital",
+      "availableDays": ["Monday", "Wednesday", "Friday"],
+      "consultationHours": "10:00 - 15:00",
+      "telemedicineAvailable": true,
+      "languages": ["Punjabi", "Hindi", "English"]
+    }
+  ]
+}
