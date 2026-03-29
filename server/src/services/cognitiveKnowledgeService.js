@@ -12,6 +12,16 @@ const KNOWLEDGE_COLLECTIONS = [
     sort: { created_at: -1 },
   },
   {
+    name: "cognitive_artifacts",
+    label: "artifact",
+    sort: { created_at: -1 },
+  },
+  {
+    name: "cognitive_confusion_episodes",
+    label: "episode",
+    sort: { started_at: -1, created_at: -1 },
+  },
+  {
     name: "cognitive_entities",
     label: "entity",
     sort: { updated_at: -1, created_at: -1 },
@@ -70,8 +80,12 @@ function buildSnapshotRecord(doc) {
     recordType: "snapshot",
     userId: doc.user_id || "",
     stateLabel: doc.state_label || "",
+    cursorState: doc.cursor_state || "",
     activeApp: doc.active_app || "",
     activeWindow: doc.active_window || "",
+    artifactLabel: doc.artifact_label || "",
+    expression: doc.camera?.expression || "",
+    detectionSource: doc.state?.detection_source || doc.detection_source || "",
     occurredAt: stringifyValue(doc.generated_at),
   };
 }
@@ -94,6 +108,59 @@ function buildEventRecord(doc) {
     userId: doc.user_id || "",
     message: doc.message || "",
     occurredAt: stringifyValue(doc.created_at),
+  };
+}
+
+function buildArtifactRecord(doc) {
+  const text = [
+    `Cognitive artifact for user ${doc.user_id || "unknown"} at ${stringifyValue(doc.created_at)}.`,
+    `Artifact ${doc.artifact_label || "unknown artifact"} with friction score ${stringifyValue(doc.friction_score)}.`,
+    doc.active_app ? `Active app ${doc.active_app}.` : "",
+    doc.active_window ? `Active window ${doc.active_window}.` : "",
+    doc.visits !== undefined ? `Visits ${doc.visits}.` : "",
+    doc.revisits !== undefined ? `Revisits ${doc.revisits}.` : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+
+  return {
+    id: `artifact:${doc._id}`,
+    text,
+    source: "cognitive_artifacts",
+    collection: "cognitive_artifacts",
+    recordType: "artifact",
+    userId: doc.user_id || "",
+    artifactLabel: doc.artifact_label || "",
+    activeApp: doc.active_app || "",
+    activeWindow: doc.active_window || "",
+    occurredAt: stringifyValue(doc.created_at),
+  };
+}
+
+function buildConfusionEpisodeRecord(doc) {
+  const text = [
+    `Confusion episode for user ${doc.user_id || "unknown"} at ${stringifyValue(doc.started_at || doc.created_at)}.`,
+    `Status ${doc.status || "unknown"} with peak confusion ${stringifyValue(doc.peak_confusion)}.`,
+    doc.duration_s !== undefined ? `Duration ${doc.duration_s} seconds.` : "",
+    doc.active_app ? `Active app ${doc.active_app}.` : "",
+    doc.active_window ? `Active window ${doc.active_window}.` : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+
+  return {
+    id: `episode:${doc._id}`,
+    text,
+    source: "cognitive_confusion_episodes",
+    collection: "cognitive_confusion_episodes",
+    recordType: "episode",
+    userId: doc.user_id || "",
+    status: doc.status || "",
+    peakConfusion: stringifyValue(doc.peak_confusion),
+    durationS: stringifyValue(doc.duration_s),
+    activeApp: doc.active_app || "",
+    activeWindow: doc.active_window || "",
+    occurredAt: stringifyValue(doc.started_at || doc.created_at),
   };
 }
 
@@ -155,6 +222,10 @@ export function buildKnowledgeRecord(collectionName, doc) {
       return buildSnapshotRecord(doc);
     case "cognitive_events":
       return buildEventRecord(doc);
+    case "cognitive_artifacts":
+      return buildArtifactRecord(doc);
+    case "cognitive_confusion_episodes":
+      return buildConfusionEpisodeRecord(doc);
     case "cognitive_entities":
       return buildEntityRecord(doc);
     case "cognitive_relations":
@@ -255,12 +326,10 @@ export async function searchCognitiveKnowledgeInMongo(
         id: record.id,
         score,
         metadata: {
+          ...record,
           source: record.source,
           text: record.text,
           content: record.text,
-          collection: record.collection,
-          recordType: record.recordType,
-          occurredAt: record.occurredAt,
         },
       };
       if (score > 0) {

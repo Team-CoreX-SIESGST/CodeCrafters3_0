@@ -2,6 +2,7 @@ import "../config/env.js";
 import mongoose from "mongoose";
 
 import connectDB from "../config/db.js";
+import { syncCognitiveGraphMaterialized } from "../services/cognitiveGraphSyncService.js";
 import { streamCognitiveKnowledgeRecords } from "../services/cognitiveKnowledgeService.js";
 import { getPineconeIndex, upsertRecords } from "../helpers/pineconeClient.js";
 
@@ -35,6 +36,8 @@ async function upsertWithRetry(records) {
 async function seed() {
   console.log("Starting cognitive Pinecone seed...");
   await connectDB();
+  const graphSync = await syncCognitiveGraphMaterialized({ force: true });
+  console.log("Graph materialization sync:", graphSync);
 
   const alreadyIndexed = await getAlreadyIndexedCount();
   console.log(`Existing Pinecone records in namespace ${namespace}: ${alreadyIndexed}`);

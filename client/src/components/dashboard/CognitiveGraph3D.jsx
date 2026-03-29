@@ -12,6 +12,12 @@ const TYPE_COLORS = {
   application: "#8b5cf6",
   window: "#f59e0b",
   artifact: "#22d3ee",
+  event: "#60a5fa",
+  episode: "#f472b6",
+  episode_status: "#fb923c",
+  project: "#2dd4bf",
+  task: "#818cf8",
+  detection_source: "#f8fafc",
   state: "#f87171",
   classifier_state: "#fb7185",
   cursor_state: "#a78bfa",
@@ -289,7 +295,7 @@ export default function CognitiveGraph3D({
         .style("display", (node) =>
           hoveredNodeIdRef.current === node.id || topNodeIds.has(node.id) ? "block" : "none"
         )
-        .text((node) => `${node.type} | ${node.source}`);
+        .text((node) => truncate(node.summary || `${node.type} | ${node.source}`, 30));
     };
 
     const simulation = d3

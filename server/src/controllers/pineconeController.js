@@ -11,6 +11,7 @@ import {
   searchCognitiveKnowledgeInMongo,
   streamCognitiveKnowledgeRecords,
 } from "../services/cognitiveKnowledgeService.js";
+import { syncCognitiveGraphMaterialized } from "../services/cognitiveGraphSyncService.js";
 
 const PINECONE_RECORD_BATCH_SIZE = 90;
 const GROQ_MODEL = "llama-3.3-70b-versatile";
@@ -39,12 +40,20 @@ function buildRecordContext(chunk) {
     metadata.occurredAt ? `Occurred at: ${metadata.occurredAt}` : "",
     metadata.userId ? `User: ${metadata.userId}` : "",
     metadata.stateLabel ? `State label: ${metadata.stateLabel}` : "",
+    metadata.cursorState ? `Cursor state: ${metadata.cursorState}` : "",
     metadata.activeApp ? `Active app: ${metadata.activeApp}` : "",
     metadata.activeWindow ? `Active window: ${metadata.activeWindow}` : "",
+    metadata.artifactLabel ? `Artifact label: ${metadata.artifactLabel}` : "",
+    metadata.expression ? `Expression: ${metadata.expression}` : "",
+    metadata.detectionSource ? `Detection source: ${metadata.detectionSource}` : "",
     metadata.entityType ? `Entity type: ${metadata.entityType}` : "",
     metadata.entityId ? `Entity id: ${metadata.entityId}` : "",
     metadata.relationType ? `Relation type: ${metadata.relationType}` : "",
+    metadata.status ? `Status: ${metadata.status}` : "",
+    metadata.peakConfusion ? `Peak confusion: ${metadata.peakConfusion}` : "",
+    metadata.durationS ? `Duration seconds: ${metadata.durationS}` : "",
     metadata.label ? `Label: ${metadata.label}` : "",
+    metadata.summary ? `Summary: ${metadata.summary}` : "",
     metadata.message ? `Message: ${metadata.message}` : "",
     `Text: ${excerpt}`,
   ]
@@ -141,12 +150,20 @@ function normalizeSourcePreview(chunk) {
     occurredAt: metadata.occurredAt || "",
     userId: metadata.userId || "",
     stateLabel: metadata.stateLabel || "",
+    cursorState: metadata.cursorState || "",
     activeApp: metadata.activeApp || "",
     activeWindow: metadata.activeWindow || "",
+    artifactLabel: metadata.artifactLabel || "",
+    expression: metadata.expression || "",
+    detectionSource: metadata.detectionSource || "",
     entityType: metadata.entityType || "",
     entityId: metadata.entityId || "",
     relationType: metadata.relationType || "",
+    status: metadata.status || "",
+    peakConfusion: metadata.peakConfusion || "",
+    durationS: metadata.durationS || "",
     label: metadata.label || "",
+    summary: metadata.summary || "",
     message: metadata.message || "",
   };
 }
@@ -342,6 +359,7 @@ export async function getPineconeKnowledgeStats(req, res) {
 export async function seedCognitiveKnowledge(req, res) {
   try {
     const namespace = req.body?.namespace || process.env.PINECONE_NAMESPACE || "default";
+    const graphSync = await syncCognitiveGraphMaterialized({ force: true });
     let upserted = 0;
     let batches = 0;
 
@@ -354,6 +372,7 @@ export async function seedCognitiveKnowledge(req, res) {
     res.json({
       success: true,
       namespace,
+      graphSync,
       upserted,
       batches,
     });

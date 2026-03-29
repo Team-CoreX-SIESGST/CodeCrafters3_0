@@ -1,5 +1,6 @@
 import { createHash } from "crypto";
 import mongoose from "mongoose";
+import { syncCognitiveGraphMaterialized } from "../services/cognitiveGraphSyncService.js";
 
 const LIVE_API_BASE = (
   process.env.COGNITIVE_LIVE_API_URL ||
@@ -550,6 +551,10 @@ function buildGraphPayload({
       id,
       label: normaliseLabel(entity?.label, id),
       type: normaliseLabel(entity?.entity_type, "default"),
+      summary: normaliseLabel(
+        entity?.summary || entity?.detail_text || entity?.description,
+        ""
+      ),
       updatedAt: serialiseDate(entity?.updated_at),
       source: inDb && inLive ? "both" : inLive ? "live" : "db",
     });
@@ -656,6 +661,8 @@ export const getCognitiveDashboard = async (_req, res) => {
   try {
     const mongoConnected = mongoose.connection.readyState === 1 && !!mongoose.connection.db;
 
+    const graphSync = await syncCognitiveGraphMaterialized();
+
     const [mongoData, mongoGraph] = await Promise.all([
       fetchMongoDashboardData(),
       fetchMongoGraphData(),
@@ -750,6 +757,7 @@ export const getCognitiveDashboard = async (_req, res) => {
       generatedAt: new Date().toISOString(),
       source: {
         mongoConnected,
+        graphSync,
         liveConnected: false,
         liveUrl: LIVE_API_BASE,
         liveError: "Dashboard is using MongoDB-only analytics.",
