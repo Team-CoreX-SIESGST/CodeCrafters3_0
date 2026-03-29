@@ -100,6 +100,8 @@ class StatusOverlay:
         self._resize_start_w = self._resize_start_h = 0
         self._resize_start_x = self._resize_start_y = 0
         self._content_min_w  = 600
+        self._compact_mode = False
+        self._last_state_key = "calibrating"
 
         # ── Root window ───────────────────────────────────────────────────
         self.root = tk.Tk()
@@ -117,6 +119,14 @@ class StatusOverlay:
         self.root.bind("<Map>", self._restore_chrome)
         self.root.bind_all("<MouseWheel>",        self._on_mousewheel,       add="+")
         self.root.bind_all("<Shift-MouseWheel>",  self._on_shift_mousewheel, add="+")
+
+        self.compact = tk.Toplevel(self.root)
+        self.compact.withdraw()
+        self.compact.overrideredirect(True)
+        self.compact.attributes("-topmost", True)
+        self.compact.attributes("-alpha", 0.97)
+        self.compact.configure(bg="#0b1220")
+        self.compact.geometry(self._compact_geometry())
 
         # ── Layout ────────────────────────────────────────────────────────
         self.outer = tk.Frame(self.root, bg="#0b1220", padx=14, pady=10)
@@ -147,6 +157,40 @@ class StatusOverlay:
                 bd=0, padx=10, pady=2, cursor="hand2",
             )
             btn.pack(side="right", padx=(4, 0))
+
+        self.compact_outer = tk.Frame(self.compact, bg="#0b1220", padx=10, pady=8)
+        self.compact_outer.pack(fill="both", expand=True)
+        self.compact.bind("<Button-1>", self._restore_from_compact, add="+")
+        self.compact_outer.bind("<Button-1>", self._restore_from_compact, add="+")
+
+        self.compact_state = tk.Label(
+            self.compact_outer,
+            text="OBSERVING",
+            font=("Segoe UI", 10, "bold"),
+            bg="#0b1220",
+            fg="#f8fafc",
+            padx=12,
+            pady=6,
+            cursor="hand2",
+        )
+        self.compact_state.pack(side="left", fill="x", expand=True)
+        self.compact_state.bind("<Button-1>", self._restore_from_compact, add="+")
+
+        self.compact_close = tk.Button(
+            self.compact_outer,
+            text="âœ•",
+            command=self.close,
+            font=("Segoe UI", 10, "bold"),
+            bg="#162033",
+            fg="#e2e8f0",
+            activebackground="#7f1d1d",
+            activeforeground="#f8fafc",
+            bd=0,
+            padx=10,
+            pady=2,
+            cursor="hand2",
+        )
+        self.compact_close.pack(side="right", padx=(8, 0))
 
         # Scrollable canvas
         self.viewport = tk.Frame(self.outer, bg="#0b1220")
@@ -382,6 +426,10 @@ class StatusOverlay:
         self.root.mainloop()
 
     def close(self) -> None:
+        try:
+            self.compact.destroy()
+        except Exception:
+            pass
         self.root.destroy()
 
     # ── Refresh ───────────────────────────────────────────────────────────────
@@ -411,6 +459,7 @@ class StatusOverlay:
         state_label = str(snap.get("state_label", state_name))
         style_key   = state_label if state_label in STATE_STYLES else state_name
         style       = STATE_STYLES.get(style_key, STATE_STYLES["calibrating"])
+        self._last_state_key = style_key
         bg          = style["bg"]
         confidence  = int(float(state_info.get("confidence", 0.6)) * 100)
 
@@ -445,6 +494,7 @@ class StatusOverlay:
             text=str(state_info.get("message", "")),
             fg=style["sub"],
         )
+        self._render_compact(style, state_label or state_name)
 
         # ── Active Time section ───────────────────────────────────────────
         session_lbl     = str(time_data.get("session_label",      "—"))
@@ -670,17 +720,61 @@ class StatusOverlay:
 
     # ── Window management ─────────────────────────────────────────────────────
     def _minimize(self) -> None:
-        self.root.update_idletasks()
-        self.root.overrideredirect(False)
-        self.root.iconify()
+        self._compact_mode = True
+        self.root.withdraw()
+        self._show_compact()
 
     def _restore_chrome(self, _event=None) -> None:
+        if self._compact_mode:
+            return
         if self.root.state() == "normal":
             self.root.after(10, self._reapply_overlay)
 
     def _reapply_overlay(self) -> None:
         self.root.overrideredirect(True)
         self.root.attributes("-topmost", True)
+
+    def _show_compact(self) -> None:
+        self.compact.geometry(self._compact_geometry())
+        self.compact.deiconify()
+        self.compact.lift()
+
+    def _restore_from_compact(self, _event=None) -> None:
+        self._compact_mode = False
+        self.compact.withdraw()
+        self.root.overrideredirect(False)
+        self.root.deiconify()
+        self.root.state("normal")
+        self.root.update_idletasks()
+        self.root.lift()
+        self.root.after(10, self._reapply_overlay)
+
+    def _compact_geometry(self) -> str:
+        width = 140 if self._last_state_key in {"focused", "deep_focus"} else 250
+        height = 56
+        sw = self.root.winfo_screenwidth()
+        sh = self.root.winfo_screenheight()
+        x = max(sw - width - 20, 0)
+        y = max(sh - height - 60, 0)
+        return f"{width}x{height}+{x}+{y}"
+
+    def _render_compact(self, style: dict[str, str], state_label: str) -> None:
+        show_state = self._last_state_key not in {"focused", "deep_focus"}
+        compact_text = (
+            style.get("badge", state_label.replace("_", " ").upper())
+            if show_state else
+            "OPEN"
+        )
+        for widget in (self.compact, self.compact_outer):
+            widget.configure(bg=style["bg"])
+        self.compact_state.configure(
+            text=f" {compact_text} ",
+            bg=style["accent"] if show_state else "#162033",
+            fg="#081018" if show_state else "#e2e8f0",
+        )
+        self.compact_close.configure(bg="#162033", fg="#e2e8f0")
+        if self._compact_mode:
+            self._show_compact()
 
     def _bind_drag(self, widget) -> None:
         widget.bind("<ButtonPress-1>", self._start_drag, add="+")
