@@ -90,7 +90,22 @@ export async function searchPineconeByText(queryText, topK = 5, filter = undefin
       topK,
       ...(filter ? { filter } : {}),
     },
-    fields: ["text", "source"],
+    fields: [
+      "text",
+      "source",
+      "collection",
+      "recordType",
+      "occurredAt",
+      "userId",
+      "stateLabel",
+      "activeApp",
+      "activeWindow",
+      "entityType",
+      "entityId",
+      "relationType",
+      "label",
+      "message",
+    ],
   });
 
   return (response?.result?.hits || []).map((hit) => {

@@ -1,7 +1,9 @@
 // src/controllers/pineconeController.js
-// Pinecone RAG chatbot controller — uses Groq embeddings + Pinecone search + Groq LLM
+// Pinecone RAG chatbot controller using Pinecone search plus Groq generation.
 
 import "../config/env.js";
+import crypto from "crypto";
+import { Groq } from "groq-sdk";
 import { upsertRecords, searchPineconeByText } from "../helpers/pineconeClient.js";
 import ChatConversation from "../models/ChatConversation.js";
 import {
@@ -9,10 +11,11 @@ import {
   searchCognitiveKnowledgeInMongo,
   streamCognitiveKnowledgeRecords,
 } from "../services/cognitiveKnowledgeService.js";
-import { Groq } from "groq-sdk";
-import crypto from "crypto";
 
 const PINECONE_RECORD_BATCH_SIZE = 90;
+const GROQ_MODEL = "llama-3.3-70b-versatile";
+const MAX_HISTORY_MESSAGES = 8;
+const MAX_CONTEXT_CHARS = 6000;
 
 function getGroqClient() {
   const apiKey = process.env.GROQ_API_KEY || process.env.GROQ_KEY;
@@ -22,25 +25,82 @@ function getGroqClient() {
   return new Groq({ apiKey });
 }
 
-const GROQ_MODEL = "llama-3.3-70b-versatile";
-const MAX_HISTORY_MESSAGES = 8; // number of past messages to include in context
-const MAX_CONTEXT_CHARS = 6000; // max chars of retrieved chunks to include
+function buildRecordContext(chunk) {
+  const metadata = chunk.metadata || {};
+  const excerpt = (metadata.text || metadata.content || "(no text)")
+    .slice(0, MAX_CONTEXT_CHARS)
+    .trim();
 
-// ─── System Prompt ────────────────────────────────────────────────────────────
-function buildSystemPrompt(retrievedChunks) {
+  return [
+    `ID: ${chunk.id || metadata.id || "unknown"}`,
+    metadata.collection ? `Collection: ${metadata.collection}` : "",
+    metadata.source ? `Source: ${metadata.source}` : "",
+    metadata.recordType ? `Record type: ${metadata.recordType}` : "",
+    metadata.occurredAt ? `Occurred at: ${metadata.occurredAt}` : "",
+    metadata.userId ? `User: ${metadata.userId}` : "",
+    metadata.stateLabel ? `State label: ${metadata.stateLabel}` : "",
+    metadata.activeApp ? `Active app: ${metadata.activeApp}` : "",
+    metadata.activeWindow ? `Active window: ${metadata.activeWindow}` : "",
+    metadata.entityType ? `Entity type: ${metadata.entityType}` : "",
+    metadata.entityId ? `Entity id: ${metadata.entityId}` : "",
+    metadata.relationType ? `Relation type: ${metadata.relationType}` : "",
+    metadata.label ? `Label: ${metadata.label}` : "",
+    metadata.message ? `Message: ${metadata.message}` : "",
+    `Text: ${excerpt}`,
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
+function wantsDetailedResponse(query) {
+  const normalized = String(query || "").toLowerCase();
+  if (!normalized.trim()) return false;
+
+  const detailedPatterns = [
+    "detailed",
+    "detail",
+    "explain",
+    "explanation",
+    "summary of my activities",
+    "summarize my activities",
+    "give me the summary of my activities",
+    "what did i do",
+    "what was i doing",
+    "my activities",
+    "activity summary",
+    "walk me through",
+  ];
+
+  return detailedPatterns.some((pattern) => normalized.includes(pattern));
+}
+
+function buildResponseStyleInstructions(query) {
+  if (wantsDetailedResponse(query)) {
+    return [
+      "The user wants a fuller explanation, not a one-line answer.",
+      "Give a detailed but readable summary in natural language.",
+      "For activity-summary questions, explain the main work, the tools or files involved, the focus patterns, and any notable changes over time.",
+      "Prefer 2-4 short paragraphs or a few clear bullets if that reads better.",
+      "Keep it user-friendly and insight-oriented rather than technical.",
+    ].join("\n");
+  }
+
+  return [
+    "Prefer a concise answer unless the user asks for more detail.",
+    "Keep the response easy to read and focused on the most useful takeaways.",
+  ].join("\n");
+}
+
+function buildSystemPrompt(retrievedChunks, query) {
   const contextBlock =
     retrievedChunks.length > 0
-      ? retrievedChunks
-          .map(
-            (c, i) =>
-              `[Source ${i + 1}${c.metadata?.source ? ` — ${c.metadata.source}` : ""}]\n${c.metadata?.text || c.metadata?.content || "(no text)"}`
-          )
-          .join("\n\n")
+      ? retrievedChunks.map((chunk) => buildRecordContext(chunk)).join("\n\n")
       : "No relevant context was found in the knowledge base for this query.";
+  const responseStyleInstructions = buildResponseStyleInstructions(query);
 
   return `You are Luna, an intelligent AI assistant backed by a curated knowledge base.
 When answering, use the CONTEXT below as your primary source of truth.
-If the context doesn't contain enough information, say so clearly and answer from your general knowledge.
+If the context does not contain enough information, say so clearly and answer from your general knowledge.
 Always be concise, helpful, and professional.
 
 === KNOWLEDGE BASE CONTEXT ===
@@ -48,8 +108,13 @@ ${contextBlock}
 === END OF CONTEXT ===
 
 Instructions:
-- Cite the source numbers [Source N] inline when referencing retrieved content.
-- If multiple sources agree, cite all relevant ones.
+- Turn raw records into clear, natural, user-friendly sentences.
+- Do not dump database-style key/value fields unless the user explicitly asks for raw data.
+- Do not include source ids, citations, or "Source records" sections unless the user explicitly asks for them.
+- Summarize timestamps, apps, windows, states, and events in normal prose that a non-technical user can understand.
+- If the records are noisy or repetitive, synthesize them into a short, meaningful summary instead of listing every field.
+- Match the depth of the answer to the user's request.
+- ${responseStyleInstructions}
 - If the user's question is unrelated to the context, answer using general knowledge and note that.`;
 }
 
@@ -65,15 +130,27 @@ async function describePineconeIndex() {
 }
 
 function normalizeSourcePreview(chunk) {
+  const metadata = chunk.metadata || {};
   return {
     id: chunk.id,
     score: chunk.score,
-    text: (chunk.metadata?.text || chunk.metadata?.content || "").slice(0, 300).trim(),
-    source: chunk.metadata?.source || "",
+    text: (metadata.text || metadata.content || "").slice(0, 300).trim(),
+    source: metadata.source || "",
+    collection: metadata.collection || "",
+    recordType: metadata.recordType || "",
+    occurredAt: metadata.occurredAt || "",
+    userId: metadata.userId || "",
+    stateLabel: metadata.stateLabel || "",
+    activeApp: metadata.activeApp || "",
+    activeWindow: metadata.activeWindow || "",
+    entityType: metadata.entityType || "",
+    entityId: metadata.entityId || "",
+    relationType: metadata.relationType || "",
+    label: metadata.label || "",
+    message: metadata.message || "",
   };
 }
 
-// ─── POST /api/pinecone/chat  (streaming SSE) ─────────────────────────────────
 export async function handlePineconeChat(req, res) {
   const { query, conversationId, namespace } = req.body || {};
   const userId = req.user?._id;
@@ -84,7 +161,6 @@ export async function handlePineconeChat(req, res) {
 
   const ns = namespace || process.env.PINECONE_NAMESPACE || "default";
 
-  // --- Set up SSE headers ---
   res.setHeader("Content-Type", "text/event-stream");
   res.setHeader("Cache-Control", "no-cache, no-transform");
   res.setHeader("Connection", "keep-alive");
@@ -98,10 +174,9 @@ export async function handlePineconeChat(req, res) {
   };
 
   try {
-    send("status", { message: "Searching knowledge base…" });
-    let pineconeStats = null;
+    send("status", { message: "Searching knowledge base..." });
     try {
-      pineconeStats = await describePineconeIndex();
+      const pineconeStats = await describePineconeIndex();
       console.log("[pineconeChat] Pinecone stats:", pineconeStats);
     } catch (statsErr) {
       console.warn("[pineconeChat] Unable to fetch Pinecone stats:", statsErr.message);
@@ -111,24 +186,21 @@ export async function handlePineconeChat(req, res) {
     try {
       retrievedChunks = await searchPineconeByText(query.trim(), 5, undefined, ns);
     } catch (pcErr) {
-      // Non-fatal — continue without context
       console.warn("[pinecone] Query failed:", pcErr.message);
-      send("status", { message: "Knowledge base unavailable, answering from general knowledge…" });
+      send("status", { message: "Knowledge base unavailable, answering from general knowledge..." });
     }
 
     if (retrievedChunks.length === 0) {
-      send("status", { message: "No Pinecone matches found. Checking cognitive database…" });
+      send("status", { message: "No Pinecone matches found. Checking cognitive database..." });
       retrievedChunks = await searchCognitiveKnowledgeInMongo(query.trim(), { limit: 5 });
     }
 
-    // Send source metadata to client
     if (retrievedChunks.length > 0) {
       send("sources", {
         sources: retrievedChunks.map(normalizeSourcePreview),
       });
     }
 
-    // 3. Load or create conversation (MongoDB)
     let conversation;
     if (conversationId) {
       conversation = await ChatConversation.findOne({
@@ -139,30 +211,25 @@ export async function handlePineconeChat(req, res) {
     if (!conversation) {
       conversation = new ChatConversation({
         userId,
-        title: query.slice(0, 60) + (query.length > 60 ? "…" : ""),
+        title: query.slice(0, 60) + (query.length > 60 ? "..." : ""),
         namespace: ns,
         messages: [],
       });
     }
 
-    // Send conversation ID to client
     send("conversationId", { conversationId: conversation._id.toString() });
 
-    // 4. Build message history for Groq
     const recentHistory = conversation.messages
       .slice(-MAX_HISTORY_MESSAGES)
-      .map((m) => ({ role: m.role, content: m.content }));
-
-    const systemPrompt = buildSystemPrompt(retrievedChunks);
+      .map((message) => ({ role: message.role, content: message.content }));
 
     const groqMessages = [
-      { role: "system", content: systemPrompt },
+      { role: "system", content: buildSystemPrompt(retrievedChunks, query.trim()) },
       ...recentHistory,
       { role: "user", content: query.trim() },
     ];
 
-    // 5. Stream Groq response
-    send("status", { message: "Generating response…" });
+    send("status", { message: "Generating response..." });
 
     let fullResponse = "";
     try {
@@ -190,20 +257,16 @@ export async function handlePineconeChat(req, res) {
       return res.end();
     }
 
-    // 6. Persist both turns to MongoDB
     conversation.messages.push(
       { role: "user", content: query.trim(), sources: [] },
       {
         role: "assistant",
         content: fullResponse,
-        sources: retrievedChunks.map((c) => ({
-          id: c.id,
-          score: c.score,
-          text: (c.metadata?.text || c.metadata?.content || "").slice(0, 500),
-          source: c.metadata?.source || "",
-          metadata: c.metadata,
+        sources: retrievedChunks.map((chunk) => ({
+          ...normalizeSourcePreview(chunk),
+          metadata: chunk.metadata,
         })),
-      }
+      },
     );
     await conversation.save();
 
@@ -218,11 +281,9 @@ export async function handlePineconeChat(req, res) {
   }
 }
 
-// ─── POST /api/pinecone/upsert  — ingest text chunks into Pinecone ────────────
 export async function handleUpsertDocuments(req, res) {
   try {
     const { documents, namespace } = req.body || {};
-    // documents: Array<{ id?: string, text: string, source?: string, metadata?: object }>
     if (!Array.isArray(documents) || documents.length === 0) {
       return res
         .status(400)
@@ -230,16 +291,16 @@ export async function handleUpsertDocuments(req, res) {
     }
 
     const ns = namespace || process.env.PINECONE_NAMESPACE || "default";
-    const texts = documents.map((d) => String(d.text || "").trim());
+    const texts = documents.map((document) => String(document.text || "").trim());
     const records = texts
-      .map((text, i) => ({ text, doc: documents[i] }))
+      .map((text, index) => ({ text, doc: documents[index] }))
       .filter((item) => item.text.length > 0)
       .map(({ text, doc }) => ({
-      id: doc.id || crypto.randomUUID(),
-      text: text.slice(0, 40000),
-      source: doc.source || "manual",
-      ...(doc.metadata || {}),
-    }));
+        id: doc.id || crypto.randomUUID(),
+        text: text.slice(0, 40000),
+        source: doc.source || "manual",
+        ...(doc.metadata || {}),
+      }));
 
     if (records.length === 0) {
       return res.status(400).json({ error: "No non-empty document text was provided" });
@@ -265,6 +326,7 @@ export async function getPineconeKnowledgeStats(req, res) {
       getCognitiveKnowledgeStats(),
       describePineconeIndex(),
     ]);
+
     res.json({
       success: true,
       mongoKnowledge,
@@ -301,7 +363,6 @@ export async function seedCognitiveKnowledge(req, res) {
   }
 }
 
-// ─── GET /api/pinecone/conversations  — list user's chat conversations ────────
 export async function getConversations(req, res) {
   try {
     const userId = req.user?._id;
@@ -316,7 +377,6 @@ export async function getConversations(req, res) {
   }
 }
 
-// ─── GET /api/pinecone/conversations/:id  — get a single conversation ─────────
 export async function getConversationById(req, res) {
   try {
     const userId = req.user?._id;
@@ -334,7 +394,6 @@ export async function getConversationById(req, res) {
   }
 }
 
-// ─── DELETE /api/pinecone/conversations/:id ───────────────────────────────────
 export async function deleteConversation(req, res) {
   try {
     const userId = req.user?._id;

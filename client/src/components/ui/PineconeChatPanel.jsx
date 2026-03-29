@@ -13,15 +13,10 @@ import {
   X,
   Send,
   Trash2,
-  ChevronDown,
-  ChevronUp,
   Database,
   Loader2,
   MessageSquare,
   Plus,
-  BookOpen,
-  AlertCircle,
-  CheckCircle2,
   Sparkles,
 } from "lucide-react"
 
@@ -29,28 +24,8 @@ const PINECONE_BASE = `${SERVER_URL}/api/pinecone`
 
 // ── tiny helpers ────────────────────────────────────────────────────────────
 
-function SourceBadge({ source, index }) {
-  const [open, setOpen] = useState(false)
-  const score = source.score != null ? Math.round(source.score * 100) : null
-  return (
-    <div className="pc-source-badge">
-      <button className="pc-source-header" onClick={() => setOpen((o) => !o)}>
-        <span className="pc-source-num">[{index + 1}]</span>
-        <span className="pc-source-title">{source.source || "Knowledge Base"}</span>
-        {score != null && <span className="pc-source-score">{score}%</span>}
-        {open ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
-      </button>
-      {open && source.text && (
-        <p className="pc-source-text">{source.text}</p>
-      )}
-    </div>
-  )
-}
-
 function ChatBubble({ msg }) {
   const isUser = msg.role === "user"
-  const hasSources = !isUser && Array.isArray(msg.sources) && msg.sources.length > 0
-  const [showSrc, setShowSrc] = useState(false)
 
   return (
     <div className={`pc-bubble-wrap ${isUser ? "pc-bubble-user" : "pc-bubble-ai"}`}>
@@ -61,25 +36,6 @@ function ChatBubble({ msg }) {
       )}
       <div className="pc-bubble">
         <p className="pc-bubble-text">{msg.content}</p>
-        {hasSources && (
-          <div className="pc-sources-block">
-            <button
-              className="pc-sources-toggle"
-              onClick={() => setShowSrc((s) => !s)}
-            >
-              <BookOpen size={11} />
-              {msg.sources.length} source{msg.sources.length > 1 ? "s" : ""}
-              {showSrc ? <ChevronUp size={11} /> : <ChevronDown size={11} />}
-            </button>
-            {showSrc && (
-              <div className="pc-sources-list">
-                {msg.sources.map((src, i) => (
-                  <SourceBadge key={src.id || i} source={src} index={i} />
-                ))}
-              </div>
-            )}
-          </div>
-        )}
         <span className="pc-bubble-time">
           {new Date(msg.createdAt || Date.now()).toLocaleTimeString([], {
             hour: "2-digit",
@@ -134,7 +90,6 @@ export default function PineconeChatPanel({ onClose }) {
   const [input, setInput] = useState("")
   const [isStreaming, setIsStreaming] = useState(false)
   const [statusMsg, setStatusMsg] = useState("")
-  const [sources, setSources] = useState([])
   const [convId, setConvId] = useState(null)
 
   const [conversations, setConversations] = useState([])
@@ -227,7 +182,6 @@ export default function PineconeChatPanel({ onClose }) {
     abortRef.current?.abort()
     setMessages([])
     setConvId(null)
-    setSources([])
     setStatusMsg("")
     setIsStreaming(false)
     setShowHistory(false)
@@ -239,7 +193,6 @@ export default function PineconeChatPanel({ onClose }) {
     if (!query || isStreaming) return
 
     setInput("")
-    setSources([])
     setStatusMsg("")
     setMessages((prev) => [
       ...prev,
@@ -271,8 +224,6 @@ export default function PineconeChatPanel({ onClose }) {
       let buffer = ""
       let currentEvent = ""
       let accText = ""
-      let msgSources = []
-
       const processLine = (line) => {
         if (!line.trim()) { currentEvent = ""; return }
         if (line.startsWith("event: ")) { currentEvent = line.slice(7).trim(); return }
@@ -284,9 +235,6 @@ export default function PineconeChatPanel({ onClose }) {
 
           if (currentEvent === "status") {
             setStatusMsg(parsed.message || "")
-          } else if (currentEvent === "sources") {
-            msgSources = parsed.sources || []
-            setSources(msgSources)
           } else if (currentEvent === "conversationId") {
             if (parsed.conversationId) setConvId(parsed.conversationId)
           } else if (currentEvent === "message" && parsed.text) {
@@ -299,11 +247,10 @@ export default function PineconeChatPanel({ onClose }) {
               )
             )
           } else if (currentEvent === "done") {
-            // finalise message with sources
             setMessages((prev) =>
               prev.map((m) =>
                 m.id === assistantId
-                  ? { ...m, content: accText, sources: msgSources }
+                  ? { ...m, content: accText }
                   : m
               )
             )
@@ -520,38 +467,6 @@ export default function PineconeChatPanel({ onClose }) {
         }
 
         /* ── Sources ────────────────────────────────── */
-        .pc-sources-block { display: flex; flex-direction: column; gap: 4px; }
-        .pc-sources-toggle {
-          display: flex; align-items: center; gap: 4px;
-          font-size: 10px; color: rgba(168,85,247,0.7);
-          background: transparent; border: none; cursor: pointer;
-          padding: 0; transition: color 0.12s;
-        }
-        .pc-sources-toggle:hover { color: #a855f7; }
-        .pc-sources-list { display: flex; flex-direction: column; gap: 4px; margin-top: 4px; }
-        .pc-source-badge {
-          background: rgba(88,28,135,0.15);
-          border: 1px solid rgba(139,92,246,0.2);
-          border-radius: 6px; overflow: hidden;
-        }
-        .pc-source-header {
-          display: flex; align-items: center; gap: 5px;
-          padding: 5px 8px; width: 100%; border: none;
-          background: transparent; cursor: pointer; text-align: left;
-          color: rgba(200,190,255,0.7); font-size: 10px;
-        }
-        .pc-source-num { color: #a855f7; font-weight: 700; }
-        .pc-source-title { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .pc-source-score {
-          color: rgba(168,85,247,0.6); font-size: 9px; font-weight: 600;
-        }
-        .pc-source-text {
-          padding: 5px 8px 6px;
-          font-size: 10px; line-height: 1.5;
-          color: rgba(200,190,255,0.55);
-          border-top: 1px solid rgba(139,92,246,0.12);
-          margin: 0;
-        }
 
         /* ── Typing indicator ───────────────────────── */
         .pc-typing {

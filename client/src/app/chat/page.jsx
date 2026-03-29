@@ -33,7 +33,6 @@ import { SERVER_URL } from "@/utils/commonHelper"
 import PineconeChatPanel from "@/components/ui/PineconeChatPanel"
 
 const CHAT_API_BASE = `${SERVER_URL}/api/pinecone`
-const CHARTS_ENDPOINT = `${SERVER_URL}/api/gemini/charts`
 
 function normalizeImageResults(raw) {
   if (!Array.isArray(raw)) return undefined
@@ -615,12 +614,10 @@ export default function ChatPage() {
         sources: [], chartUrl: null, chartUrls: [], images: [], videos: [], socialProfiles: [], socialReason: "", promptTitle: userContent, isComplete: false,
       }])
 
-      let resolvedConversationId = conversationId || null
       const reader = response.body?.getReader()
       const decoder = new TextDecoder()
       let buffer = ""
       let streamedContent = ""
-      let streamedSources = []
       let streamedImages = []
       let streamedVideos = []
       let streamedCodeSnippets = []
@@ -639,7 +636,6 @@ export default function ChatPage() {
         try {
           const parsed = JSON.parse(data)
           if (currentEvent === "conversationId" || parsed.conversationId) {
-            resolvedConversationId = parsed.conversationId
             if (parsed.conversationId !== currentConversationId) setCurrentConversationId(parsed.conversationId)
           } else if (currentEvent === "message" && parsed.text && typeof parsed.text === "string") {
             streamedContent += parsed.text
@@ -656,9 +652,6 @@ export default function ChatPage() {
           } else if (currentEvent === "images") {
             const normalized = normalizeImageResults(parsed?.images ?? parsed?.imageResults ?? parsed?.items ?? parsed)
             if (normalized) { streamedImages = normalized; setMessages((prev) => prev.map((msg) => msg.id === assistantMessageId ? { ...msg, images: normalized } : msg)) }
-          } else if (currentEvent === "sources" && parsed.sources && Array.isArray(parsed.sources)) {
-            streamedSources = parsed.sources
-            setMessages((prev) => prev.map((msg) => msg.id === assistantMessageId ? { ...msg, sources: streamedSources } : msg))
           } else if (currentEvent === "mlSchema") {
             const payload = parsed?.payload ?? parsed
             const pattern = typeof parsed?.pattern === "string" ? parsed.pattern : undefined
@@ -727,37 +720,10 @@ export default function ChatPage() {
 
       const finalContent = streamedContent || "I couldn't fetch the details. Please try again later."
       setMessages((prev) => prev.map((msg) => msg.id === assistantMessageId ? {
-        ...msg, content: finalContent, sources: streamedSources, chartUrl: msg.chartUrl, chartUrls: msg.chartUrls ?? [],
+        ...msg, content: finalContent, chartUrl: msg.chartUrl, chartUrls: msg.chartUrls ?? [],
         images: streamedImages.length > 0 ? streamedImages : msg.images, videos: streamedVideos.length > 0 ? streamedVideos : msg.videos,
         codeSnippets: streamedCodeSnippets, executionOutputs: streamedExecutionOutputs, mermaidBlocks: streamedMermaidBlocks, createdAt: new Date(), isComplete: true,
       } : msg))
-
-      const chartsConversationId = resolvedConversationId ?? currentConversationId
-      if (!abortControllerRef.current?.signal.aborted && chartsConversationId) {
-        setAssistantStatuses((prev) => ({ ...prev, charting: "active" }))
-        try {
-          const chartsResponse = await fetch(CHARTS_ENDPOINT, {
-            method: "POST",
-            headers: { "Content-Type": "application/json", ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}) },
-            body: JSON.stringify({ prompt: userContent, conversationId: chartsConversationId, options: { includeSearch: true, includeYouTube } }),
-          })
-          if (chartsResponse.ok) {
-            const chartData = await chartsResponse.json()
-            const chartUrlFromResponse = chartData?.chartUrl || chartData?.charts?.chartUrl
-            if (typeof chartUrlFromResponse === "string" && chartUrlFromResponse.trim().length > 0) {
-              setMessages((prev) => prev.map((msg) => msg.id === assistantMessageId ? {
-                ...msg, chartUrl: chartUrlFromResponse, chartUrls: Array.from(new Set([...(msg.chartUrls ?? []), chartUrlFromResponse])),
-              } : msg))
-            }
-            setAssistantStatuses((prev) => ({ ...prev, charting: "complete" }))
-          } else {
-            throw new Error(await chartsResponse.text())
-          }
-        } catch (chartErr) {
-          console.error("Chart fetch after chat failed:", chartErr)
-          setAssistantStatuses((prev) => ({ ...prev, charting: "pending" }))
-        }
-      }
     } catch (error) {
       if (error.name === "AbortError") return
       console.error("Error in streaming:", error)

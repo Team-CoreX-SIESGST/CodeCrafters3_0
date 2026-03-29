@@ -1,20 +1,18 @@
-import { BarChart3, Check, Search, Sparkles } from "lucide-react"
+import { Check, Search, Sparkles } from "lucide-react"
 import { AnimatePresence, motion } from "framer-motion"
 import { cn } from "@/lib/utils"
 
-export type AssistantStage = "searching" | "responding" | "charting"
+export type AssistantStage = "searching" | "responding"
 export type AssistantStageState = "pending" | "active" | "complete"
 export type AssistantStatusMap = Record<AssistantStage, AssistantStageState>
 
 export const createInitialAssistantStatuses = (): AssistantStatusMap => ({
   searching: "pending",
   responding: "pending",
-  charting: "pending",
 })
 
 interface TypingIndicatorProps {
   statuses?: Partial<AssistantStatusMap>
-  stageDetails?: Partial<Record<AssistantStage, string>>
   sourceHints?: Partial<Record<AssistantStage, string[]>>
 }
 
@@ -36,21 +34,14 @@ const STAGE_CONFIG: Array<{
       description: "",
       icon: Sparkles,
     },
-    {
-      key: "charting",
-      title: "Preparing charts",
-      description: "Visualizing key findings",
-      icon: BarChart3,
-    },
   ]
 
 const DEFAULT_SOURCE_HINTS: Record<AssistantStage, string[]> = {
   searching: ["Google", "Bing", "Reuters"],
   responding: ["Google", "Bing", "Reuters"],
-  charting: ["Data shaping", "Visual draft", "Refining axes"],
 }
 
-export function TypingIndicator({ statuses, stageDetails, sourceHints }: TypingIndicatorProps) {
+export function TypingIndicator({ statuses, sourceHints }: TypingIndicatorProps) {
   const mergedStatuses: AssistantStatusMap = {
     ...createInitialAssistantStatuses(),
     ...(statuses ?? {}),
@@ -87,9 +78,7 @@ export function TypingIndicator({ statuses, stageDetails, sourceHints }: TypingI
             const label =
               stage.key === "searching"
                 ? "Searching Deep Web"
-                : stage.key === "responding"
-                  ? "Reasoning & Analyzing"
-                  : "Visualizing Insights"
+                : "Reasoning & Analyzing"
 
             return (
               <div key={stage.key} className="flex items-center gap-4">

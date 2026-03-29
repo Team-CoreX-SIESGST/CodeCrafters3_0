@@ -427,7 +427,6 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
   experimental_attachments,
   toolInvocations,
   parts,
-  sources,
   promptTitle,
   isComplete,
   codeSnippets,
@@ -513,13 +512,8 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
   // Debug logging
   if (process.env.NODE_ENV === 'development') {
     console.log('ChatMessage - Role:', role,
-      'Sources:', sources ? `Array(${sources.length})` : 'none',
       'Content:', content ? `${content.substring(0, 50)}${content.length > 50 ? '...' : ''}` : 'empty'
     )
-
-    if (sources && sources.length > 0) {
-      console.log('Sources details:', JSON.stringify(sources, null, 2));
-    }
   }
 
   const formattedTime = createdAt?.toLocaleTimeString("en-US", {
@@ -994,89 +988,6 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
                     );
                   })}
               </div>
-            </div>
-          </motion.div>
-        )}
-        {sources && sources.length > 0 && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ duration: 0.8, delay: 0.8 }}
-            className="mt-8 pt-6 border-t border-border/40 relative z-10"
-          >
-            <div className="flex items-center gap-2.5 mb-4">
-              <div className="flex h-6 w-6 items-center justify-center rounded-md bg-blue-500/10 text-blue-600 dark:bg-blue-500/20 dark:text-blue-400">
-                <Globe className="h-3.5 w-3.5" />
-              </div>
-              <h3 className="text-xs font-semibold text-foreground">Sources & Citations</h3>
-              <span className="flex h-4.5 min-w-[18px] items-center justify-center rounded-full bg-blue-500/10 px-1 text-[10px] font-bold text-blue-600 dark:text-blue-400">
-                {sources.length}
-              </span>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-60 overflow-y-auto no-scrollbar pr-1">
-              {sources.map((source, index) => {
-                if (!source) return null;
-
-                try {
-                  let href: string;
-                  let displayText: string;
-
-                  if (typeof source === 'string') {
-                    href = source;
-                    try {
-                      const url = new URL(href);
-                      displayText = url.hostname.replace('www.', '');
-                    } catch (e) {
-                      return (
-                        <div key={index} className="flex items-center gap-2 p-2 rounded-xl bg-muted/30 border border-border/40 text-[10px] text-muted-foreground">
-                          <Globe className="h-3 w-3" />
-                          <span className="truncate">{source.substring(0, 50)}</span>
-                        </div>
-                      );
-                    }
-                  } else {
-                    href = source.url;
-                    displayText = source.title || (() => {
-                      try {
-                        const url = new URL(href);
-                        return url.hostname.replace('www.', '');
-                      } catch {
-                        return href;
-                      }
-                    })();
-                  }
-
-                  return (
-                    <motion.a
-                      key={index}
-                      href={href}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      initial={{ opacity: 0, y: 5 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: index * 0.05 + 0.5 }}
-                      className="group flex items-center gap-3 p-2.5 rounded-xl border border-border/40 bg-background/40 backdrop-blur-sm transition-all hover:bg-muted/50 hover:border-blue-500/30 hover:translate-x-1"
-                      title={displayText}
-                    >
-                      <div className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg bg-muted/50 group-hover:bg-blue-500/10 group-hover:text-blue-600 transition-colors">
-                        <Globe className="h-3.5 w-3.5" />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="text-[11px] font-semibold text-foreground/80 group-hover:text-blue-600 dark:group-hover:text-blue-400 truncate transition-colors">
-                          {displayText}
-                        </div>
-                        <div className="text-[9px] text-muted-foreground truncate opacity-70">
-                          {href}
-                        </div>
-                      </div>
-                      <ExternalLink className="h-3 w-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-all -translate-x-2 group-hover:translate-x-0" />
-                    </motion.a>
-                  );
-                } catch (e) {
-                  return null;
-                }
-              })}
             </div>
           </motion.div>
         )}
