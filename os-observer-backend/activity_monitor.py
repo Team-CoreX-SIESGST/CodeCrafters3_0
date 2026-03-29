@@ -345,9 +345,10 @@ class MongoStore:
 
 # ── Main activity monitor ─────────────────────────────────────────────────────
 class ActivityMonitor:
-    def __init__(self) -> None:
+    def __init__(self, camera_enabled_override: bool | None = None) -> None:
         self.user_id      = USER_ID
         self.store        = MongoStore()
+        self.camera_enabled = settings.camera_enabled if camera_enabled_override is None else camera_enabled_override
         self._baseline_cache_path = (
             BASE_DIR / ".baseline-cache" / f"{hashlib.sha1(self.user_id.encode()).hexdigest()[:16]}.json"
         )
@@ -420,7 +421,7 @@ class ActivityMonitor:
     def start(self) -> None:
         self.cursor_monitor.start()
         self.keyboard_monitor.start()
-        if settings.camera_enabled:
+        if self.camera_enabled:
             self.camera_monitor.start()
         else:
             self.record_event("Camera monitor disabled by configuration.", persist=False)
@@ -432,7 +433,7 @@ class ActivityMonitor:
         self.focus_mode.restore()
         self.cursor_monitor.stop()
         self.keyboard_monitor.stop()
-        if settings.camera_enabled:
+        if self.camera_enabled:
             self.camera_monitor.stop()
         self.app_monitor.stop()
 
@@ -922,7 +923,7 @@ class ActivityMonitor:
             cursor   = self.cursor_monitor.snapshot()
             keyboard = self.keyboard_monitor.snapshot()
             camera   = (self.camera_monitor.snapshot()
-                        if settings.camera_enabled
+                        if self.camera_enabled
                         else _camera_disabled_snapshot())
             system   = self.app_monitor.snapshot()
 

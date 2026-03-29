@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import threading
+import tkinter as tk
+from tkinter import messagebox
 
 import uvicorn
 
@@ -13,8 +15,28 @@ def run_api(activity_monitor: ActivityMonitor) -> None:
     uvicorn.run(app, host=settings.api_host, port=settings.api_port, log_level="warning")
 
 
+def ask_camera_consent() -> bool:
+    if not settings.camera_enabled:
+        return False
+
+    root = tk.Tk()
+    root.withdraw()
+    root.attributes("-topmost", True)
+    try:
+        return bool(
+            messagebox.askyesno(
+                "Camera Access",
+                "Flow Guardian can use your camera for blink and face tracking.\n\nDo you want to allow camera access?",
+                parent=root,
+            )
+        )
+    finally:
+        root.destroy()
+
+
 def main() -> None:
-    monitor = ActivityMonitor()
+    camera_allowed = ask_camera_consent()
+    monitor = ActivityMonitor(camera_enabled_override=camera_allowed)
     monitor.start()
 
     api_thread = threading.Thread(
