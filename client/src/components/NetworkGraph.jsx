@@ -47,7 +47,7 @@ function readTheme() {
 }
 
 export default function NetworkGraph({
-  apiUrl = "http://localhost:5002/api/graph",
+  apiUrl = "http://localhost:5003/api/graph",
   useStreaming = false,
   height = 680,
 }) {

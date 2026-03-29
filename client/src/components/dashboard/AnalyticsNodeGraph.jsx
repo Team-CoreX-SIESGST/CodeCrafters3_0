@@ -17,6 +17,12 @@ const TYPE_COLORS = {
   application:       [139, 92, 246],
   window:            [251, 191, 36],
   artifact:          [34, 211, 238],
+  event:             [96, 165, 250],
+  episode:           [244, 114, 182],
+  episode_status:    [251, 146, 60],
+  project:           [45, 212, 191],
+  task:              [129, 140, 248],
+  detection_source:  [248, 250, 252],
   snapshot:          [148, 163, 184],
   classifier_state:  [251, 113, 133],
   cursor_state:      [167, 139, 250],
@@ -66,6 +72,7 @@ export default function AnalyticsNodeGraph({ nodes = [], links = [], height = 50
       return {
         id:     n.id,
         label:  (n.label || n.id || "node").slice(0, 16),
+        summary: (n.summary || "").slice(0, 28),
         type:   (n.type || "default").toLowerCase(),
         color:  getColor(n),
         degree: n.degree || 0,
@@ -317,7 +324,7 @@ export default function AnalyticsNodeGraph({ nodes = [], links = [], height = 50
       /* type badge below */
       ctx.font        = "500 7px 'IBM Plex Mono', monospace";
       ctx.fillStyle   = `rgba(200,220,240,${0.75 * depthAlpha})`;
-      ctx.fillText(n.type.toUpperCase(), sx, sy + baseR + 14);
+      ctx.fillText((n.summary || n.type).toUpperCase(), sx, sy + baseR + 14);
     };
 
     const drawHUD = () => {

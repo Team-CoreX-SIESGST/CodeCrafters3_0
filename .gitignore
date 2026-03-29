@@ -137,3 +137,23 @@ dist
 # Vite logs files
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
+
+# Python & Machine Learning
+__pycache__/
+*.py[cod]
+*$py.class
+*.env
+v/
+venv/
+env/
+.venv/
+.env/
+
+# ML Artifacts (CRITICAL PREVENTS 100MB CRASH)
+flow_guardian_export/
+*.csv
+*.pt
+*.pth
+*.zip
+*.log
+*.npy

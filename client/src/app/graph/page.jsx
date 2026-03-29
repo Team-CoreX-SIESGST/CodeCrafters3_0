@@ -32,7 +32,7 @@ export default function GraphPage() {
             apiUrl={
               process.env.NEXT_PUBLIC_API_URL
                 ? `${process.env.NEXT_PUBLIC_API_URL}/api/graph`
-                : "http://localhost:5002/api/graph"
+                : "http://localhost:5003/api/graph"
             }
             useStreaming={true}
             height={620}
