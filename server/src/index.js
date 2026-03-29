@@ -1,6 +1,7 @@
 import express from "express";
 import cors from "cors";
 import http from "http";
+import os from "os";
 import { Server } from "socket.io";
 import "./config/env.js";
 import connectDB from "./config/db.js";
@@ -11,6 +12,47 @@ connectDB();
 
 const app = express();
 const PORT = process.env.PORT || 5000;
+const HOST = process.env.HOST || "0.0.0.0";
+
+const isPrivateIpv4 = (hostname = "") => {
+  if (!hostname) return false;
+  if (hostname === "localhost" || hostname === "127.0.0.1") return true;
+
+  const octets = hostname.split(".").map(Number);
+  if (octets.length !== 4 || octets.some((value) => !Number.isInteger(value))) {
+    return false;
+  }
+
+  if (octets[0] === 10) return true;
+  if (octets[0] === 127) return true;
+  if (octets[0] === 192 && octets[1] === 168) return true;
+  if (octets[0] === 172 && octets[1] >= 16 && octets[1] <= 31) return true;
+  return false;
+};
+
+const isAllowedDevOrigin = (origin = "") => {
+  try {
+    const parsed = new URL(origin);
+    return ["http:", "https:"].includes(parsed.protocol) && isPrivateIpv4(parsed.hostname);
+  } catch {
+    return false;
+  }
+};
+
+const getNetworkUrls = (port) => {
+  const interfaces = os.networkInterfaces();
+  const urls = new Set();
+
+  Object.values(interfaces).forEach((addresses) => {
+    (addresses || []).forEach((address) => {
+      if (address.family === "IPv4" && !address.internal) {
+        urls.add(`http://${address.address}:${port}`);
+      }
+    });
+  });
+
+  return [...urls];
+};
 
 // Middleware
 const allowedOrigins = [
@@ -22,7 +64,9 @@ const allowedOrigins = [
 const corsOptions = {
   origin: (origin, callback) => {
     if (!origin) return callback(null, true);
-    if (allowedOrigins.includes(origin)) return callback(null, true);
+    if (allowedOrigins.includes(origin) || isAllowedDevOrigin(origin)) {
+      return callback(null, true);
+    }
     return callback(new Error("Not allowed by CORS"));
   },
   credentials: true,
@@ -160,6 +204,12 @@ io.on("connection", (socket) => {
 });
 
 // Start server
-httpServer.listen(PORT, () => {
+httpServer.listen(PORT, HOST, () => {
   console.log(`Server is running on port ${PORT}`);
+  console.log(`Local API: http://localhost:${PORT}`);
+
+  const networkUrls = getNetworkUrls(PORT);
+  networkUrls.forEach((url) => {
+    console.log(`Network API: ${url}`);
+  });
 });
