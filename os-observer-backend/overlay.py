@@ -13,6 +13,7 @@ import tkinter as tk
 from collections import deque
 from typing import Deque
 
+from PIL import Image, ImageTk
 from time_tracker import fmt as fmt_time
 
 
@@ -89,8 +90,9 @@ APP_BAR = 140
 
 
 class StatusOverlay:
-    def __init__(self, payload_provider, refresh_ms: int = 200) -> None:
+    def __init__(self, payload_provider, camera_provider=None, refresh_ms: int = 100) -> None:
         self.payload_provider = payload_provider
+        self.camera_provider = camera_provider
         self.refresh_ms       = refresh_ms
 
         # Score history for trend arrows (last 5 snapshots)
@@ -327,6 +329,9 @@ class StatusOverlay:
         self.cam_frame.pack(anchor="w", fill="x", pady=(0, 4))
         self._bind_drag(self.cam_frame)
 
+        self.lbl_video = tk.Label(self.cam_frame, bg="#0b1220")
+        self.lbl_video.pack(side="right", anchor="n", padx=(10, 0))
+
         # Blink rate gauge
         self.lbl_blink = tk.Label(
             self.cam_frame,
@@ -437,9 +442,24 @@ class StatusOverlay:
         try:
             snap = self.payload_provider()
             self._render(snap)
+            self._render_video()
         except Exception:
             pass
         self.root.after(self.refresh_ms, self._refresh)
+
+    def _render_video(self) -> None:
+        if not self.camera_provider:
+            return
+        frame = self.camera_provider()
+        if frame is not None:
+            try:
+                img = Image.fromarray(frame)
+                img.thumbnail((240, 180), Image.Resampling.LANCZOS)
+                img_tk = ImageTk.PhotoImage(image=img)
+                self.lbl_video.img_tk = img_tk
+                self.lbl_video.configure(image=img_tk)
+            except Exception:
+                pass
 
     def _render(self, snap: dict) -> None:
         state_info  = snap.get("state", {})
