@@ -148,6 +148,13 @@ class StatusOverlay:
         self.lbl_title.pack(side="left", fill="x", expand=True)
         self._bind_drag(self.lbl_title)
 
+        self.lbl_voice_coach = tk.Label(
+            self.header, text="🔊 AI COACH ACTIVE",
+            font=("Segoe UI", 8, "bold"),
+            bg="#0f1e35", fg="#60a5fa", padx=8, pady=2, bd=0
+        )
+        self.lbl_voice_coach.pack(side="left", padx=10)
+
         for text, cmd, hover_bg in (
             ("_", self._minimize, "#1e3a5f"),
             ("✕", self.close,     "#7f1d1d"),
@@ -739,6 +746,32 @@ class StatusOverlay:
         self.canvas.configure(scrollregion=self.canvas.bbox("all"))
 
     # ── Window management ─────────────────────────────────────────────────────
+    def _prompt_break(self, limit_sec: int = 300) -> None:
+        popup = tk.Toplevel(self.root)
+        popup.title("Break Time")
+        popup.attributes("-topmost", True)
+        popup.configure(bg="#0b1220")
+        
+        w, h = 350, 160
+        sw = self.root.winfo_screenwidth()
+        sh = self.root.winfo_screenheight()
+        popup.geometry(f"{w}x{h}+{(sw-w)//2}+{(sh-h)//2}")
+
+        msg = "You've been deeply focused for 30 mins." if limit_sec == 1800 else "You appear fatigued."
+        tk.Label(popup, text=msg, font=("Segoe UI", 10), bg="#0b1220", fg="#cbd5e1").pack(pady=(20, 5))
+        tk.Label(popup, text="Would you like to take a 5-minute break?", font=("Segoe UI", 11, "bold"), bg="#0b1220", fg="#f8fafc").pack(pady=(0, 20))
+        
+        btn_frame = tk.Frame(popup, bg="#0b1220")
+        btn_frame.pack()
+        
+        def reset_timer():
+            self._demo_start_ts = __import__('time').time()
+            self._break_prompted = False
+            popup.destroy()
+
+        tk.Button(btn_frame, text="Yes (5m Break)", command=reset_timer, width=14, cursor="hand2", bg="#22c55e", fg="#052e16", font=("Segoe UI", 9, "bold"), bd=0, pady=4).pack(side="left", padx=10)
+        tk.Button(btn_frame, text="Not Now", command=reset_timer, width=10, cursor="hand2", bg="#1e293b", fg="#e2e8f0", font=("Segoe UI", 9, "bold"), bd=0, pady=4).pack(side="left", padx=10)
+
     def _minimize(self) -> None:
         self._compact_mode = True
         self.root.withdraw()
@@ -779,6 +812,17 @@ class StatusOverlay:
         return f"{width}x{height}+{x}+{y}"
 
     def _render_compact(self, style: dict[str, str], state_label: str) -> None:
+        # Only update the compact badge after the state has persisted for 3+ refresh cycles
+        # This prevents 1-second camera flickers from spamming the minimised pill badge
+        self._compact_persist_count = getattr(self, "_compact_persist_count", 0)
+        self._compact_last_state    = getattr(self, "_compact_last_state", "")
+        if state_label == self._compact_last_state:
+            self._compact_persist_count += 1
+        else:
+            self._compact_persist_count = 0
+            self._compact_last_state    = state_label
+        if self._compact_persist_count < 3:
+            return  # Don't update compact until state persists 3 consecutive cycles
         show_state = self._last_state_key not in {"focused", "deep_focus"}
         compact_text = (
             style.get("badge", state_label.replace("_", " ").upper())

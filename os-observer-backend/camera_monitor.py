@@ -52,7 +52,7 @@ HEAD_MOVEMENT_WINDOW_S = 5.0
 BROW_FURROW_RATIO = 0.88
 BROW_RAISE_RATIO  = 1.08  # Lowered from 1.14 to make 'surprised' easier to trigger!
 EAR_SQUINT_RATIO  = 0.85
-RIGOROUS_HEAD_MOVEMENT_THRESHOLD = 0.12
+RIGOROUS_HEAD_MOVEMENT_THRESHOLD = 0.04  # Lowered: catches subtle head tilts/scratches
 
 
 def clamp(value: float, lo: float = 0.0, hi: float = 1.0) -> float:
@@ -223,13 +223,22 @@ class CameraMonitor:
                 expr = self._detect_expression(lm, ear, threshold, mar)
 
                 # --- YOLO Object Detection for Phone ---
-                if hasattr(self, 'yolo_model') and self.yolo_model is not None and self._frames_processed % 4 == 0:
-                    try:
-                        results = self.yolo_model(rgb, classes=[67], verbose=False)
-                        if len(results[0].boxes) > 0:
-                            expr = "distracted (phone in hand)"
-                    except Exception:
-                        pass
+                if hasattr(self, 'yolo_model') and self.yolo_model is not None:
+                    # Run YOLO every 4 frames for performance
+                    if self._frames_processed % 4 == 0:
+                        try:
+                            results = self.yolo_model(rgb, classes=[67], verbose=False)
+                            if len(results[0].boxes) > 0:
+                                self._phone_persistent_count = 6 # Stay active for 6 frames (~0.2s)
+                            else:
+                                self._phone_persistent_count = getattr(self, "_phone_persistent_count", 0) - 1
+                        except Exception:
+                            pass
+                    else:
+                        self._phone_persistent_count = getattr(self, "_phone_persistent_count", 0) - 1
+
+                    if getattr(self, "_phone_persistent_count", 0) > 0:
+                        expr = "distracted (phone in hand)"
                 # ---------------------------------------
 
                 with self._lock:
@@ -277,7 +286,7 @@ class CameraMonitor:
             
             # If the distance from forehead to nose is vastly larger than nose to chin, 
             # the user's head is pitched severely downward (looking at phone/lap).
-            if nose_to_chin > 0 and (forehead_to_nose / nose_to_chin) > 1.35:
+            if nose_to_chin > 0 and (forehead_to_nose / nose_to_chin) > 1.60:
                 return "distracted (phone)"
         except Exception:
             pass

@@ -86,7 +86,7 @@ COMM_APPS = ("slack", "teams", "outlook", "gmail", "discord", "telegram", "whats
 AI_APPS   = ("chatgpt", "claude", "copilot", "gemini", "perplexity")
 CAL_APPS  = ("calendar", "meet", "zoom")
 
-WINDOW_SECONDS   = 30.0
+WINDOW_SECONDS   = 12.0
 IDLE_GAP_SECONDS =  2.0
 ML_INFERENCE_INTERVAL_SECONDS = WINDOW_SECONDS
 ML_RESULT_STALE_SECONDS = WINDOW_SECONDS * 2.5
@@ -407,6 +407,16 @@ class ActivityMonitor:
         self.last_ml_result_time = 0.0
         self.latest_ml_features: dict[str, float] | None = None
 
+        # --- Voice Coach Integration ---
+        try:
+            from voice_coach import VoiceCoach
+            self.coach = VoiceCoach()
+            self._last_phone_alert_time = 0.0
+            self._last_urgent_alert_time = 0.0
+        except Exception as e:
+            print(f"Voice Coach disabled: {e}")
+            self.coach = None
+
         # ── Sub-monitors ──────────────────────────────────────────────────
         self.cursor_monitor   = CursorMonitor(window_seconds=WINDOW_SECONDS, event_callback=self.record_event)
         self.keyboard_monitor = KeyboardMonitor(window_seconds=WINDOW_SECONDS, event_callback=self.record_event)
@@ -414,7 +424,7 @@ class ActivityMonitor:
         self.app_monitor      = AppMonitor(poll_interval=2.0,              event_callback=self.record_event)
         self.time_tracker     = TimeTracker()
         self.focus_mode       = FocusModeController(event_callback=self.record_event)
-        self.classifier       = CognitiveStateClassifier(calibration_seconds=90.0, minimum_samples=20)
+        self.classifier       = CognitiveStateClassifier(calibration_seconds=60.0, minimum_samples=20)
         self._restore_classifier_baseline()
 
     # ── Lifecycle ─────────────────────────────────────────────────────────────
@@ -869,7 +879,52 @@ class ActivityMonitor:
             "ear_mean": float(ear_mean) if isinstance(ear_mean, (int, float)) else 0.0,
             "app_switches": float(app_switches),
             "dwell_seconds": float(max(dwell_seconds, 0.0)),
+            # Anti-false-positive: smooth direction_changes over 3 windows
+            "direction_changes": float(cursor.get("direction_changes", 0.0)) * 0.33,
         }
+
+    def _apply_camera_override(self, ml_result: dict) -> None:
+        """Layer camera vision signals on top of frozen ONNX output.
+        Safe to call even during warmup with a default ml_result dict."""
+        try:
+            cam_snap      = self.camera_monitor.snapshot() if self.camera_enabled else {}
+            expr          = str(cam_snap.get("expression", "neutral")).lower()
+            head_class    = str(cam_snap.get("head_movement_class", "steady")).lower()
+            rigorous_head = bool(cam_snap.get("rigorous_head_movement", False))
+            perclos       = float(cam_snap.get("perclos") or 0.0)
+            face_detected = bool(cam_snap.get("face_detected", True))
+            current_state = str(ml_result.get("cognitive_state", "calibrating"))
+
+            # 1. Phone Alert (Immediate Voice Coach trigger)
+            if ("phone" in expr) and getattr(self, "coach", None):
+                now = time.time()
+                # Rate limit phone alerts to once every 30 seconds
+                if now - getattr(self, "_last_phone_alert_at", 0) > 30:
+                    self.coach.speak("I noticed the phone usage. Let us stay focused on the task.")
+                    self._last_phone_alert_at = now
+
+            # Rule 1: Active OR rigorous head movement -> confused
+            if (rigorous_head or head_class == "active") and current_state not in {"fatigued"}:
+                ml_result["cognitive_state"] = "confused"
+                ml_result["confusion_friction"] = min(ml_result.get("confusion_friction", 0.0) + 0.25, 1.0)
+
+            # Rule 2: Heavy PERCLOS spike -> fatigued
+            if perclos > 0.20:
+                ml_result["cognitive_state"] = "fatigued"
+                ml_result["pre_error_prob"]   = min(ml_result.get("pre_error_prob", 0.0) + 0.30, 1.0)
+
+            # Rule 3: Phone/distracted -> confused
+            if "distracted" in expr or "phone" in expr:
+                ml_result["cognitive_state"] = "confused"
+                ml_result["attention_residue"] = min(ml_result.get("attention_residue", 0.0) + 0.45, 1.0)
+
+            # Rule 4: Face gone -> fatigued
+            if not face_detected:
+                ml_result["cognitive_state"] = "fatigued"
+
+        except Exception:
+            pass
+
 
     def _run_ml_inference(self, *, now_ts: float, ml_features: dict[str, float]) -> None:
         if not self.inference_engine:
@@ -898,6 +953,9 @@ class ActivityMonitor:
         self.last_ml_result_time = now_ts
         current_state = str(ml_result.get("cognitive_state", ""))
 
+        # ── Camera-signal Post-Inference Override ─────────────────────────
+        self._apply_camera_override(ml_result)
+
         # ── Real-time ONNX output (visible in terminal) ───────────────────
         print(
             f"[ONNX] {time.strftime('%H:%M:%S')} "
@@ -909,8 +967,19 @@ class ActivityMonitor:
             f"struggle={ml_result.get('struggle_type', 'n/a')}"
         )
 
-        if current_state and current_state != previous_state:
-            self.record_event(f"ML State inferred: {current_state.capitalize()}")
+        if current_state:
+            if current_state == previous_state:
+                self._state_persistence_count = getattr(self, "_state_persistence_count", 0) + 1
+            else:
+                self._state_persistence_count = 1
+                self.record_event(f"ML State inferred: {current_state.capitalize()}")
+                
+            # AI Voice Coach logic: announce only after persisting for 3 cycles (so 3 * 12s = 36 seconds of the exact same state)
+            if self._state_persistence_count == 3 and getattr(self, "coach", None):
+                if current_state == "fatigued":
+                    self.coach.speak("Warning. Cognitive fatigue persistence detected. I recommend a short mental break.")
+                elif current_state == "confused":
+                    self.coach.speak("You seem persistently stuck. Try breaking the task into smaller steps.")
 
     def snapshot(self) -> dict[str, Any]:
         with self._snapshot_lock:
@@ -927,10 +996,56 @@ class ActivityMonitor:
                         else _camera_disabled_snapshot())
             system   = self.app_monitor.snapshot()
 
-            # ── Active time tracking ──────────────────────────────────────
+            # Update active time tracking
             active_app    = str(system.get("active_app",    "Unknown"))
             active_window = str(system.get("active_window", "Unknown"))
             self.time_tracker.tick(active_app, active_window)
+
+            # --- Urgent Notification Reader ---
+            # If current title has urgent keywords, announce it (once per 60s)
+            if getattr(self, "coach", None):
+                urgent_keys = ["urgent", "critical", "important", "alert", "warning"]
+                low_title = active_window.lower()
+                if any(k in low_title for k in urgent_keys):
+                    now_ts = time.time()
+                    if now_ts - getattr(self, "_last_urgent_notif_at", 0) > 60:
+                        self.coach.speak(f"Alert: Critical update in your {active_app} window.")
+                        self._last_urgent_notif_at = now_ts
+            
+            # --- AI Coach Notification & Phone alerts ---
+            if getattr(self, "coach", None):
+                expression = str(camera.get("expression", "")).lower()
+                if "phone" in expression:
+                    # Persist reading for roughly 3 continuous seconds (~10 snapshots)
+                    self._phone_persist = getattr(self, "_phone_persist", 0) + 1
+                    if self._phone_persist == 10 and (now_ts - getattr(self, "_last_phone_alert_time", 0.0)) > 30:
+                        self.coach.speak("Alert. Persistent cell phone distraction detected. Please return your focus to the screen.")
+                        self._last_phone_alert_time = now_ts
+                else:
+                    self._phone_persist = 0
+                
+                # Check for "urgent" or specific keywords in active window (e.g., Slack/Teams)
+                window_lower = active_window.lower()
+                if ("urgent" in window_lower or "critical" in window_lower) and (now_ts - getattr(self, "_last_urgent_alert_time", 0.0)) > 60:
+                    clean_title = active_window.split('-')[0].strip()[:40]
+                    self.coach.speak(f"Important notification detected on screen: {clean_title}")
+                    self._last_urgent_alert_time = now_ts
+                    
+                # Dynamic demo break prompt based on cognitive state
+                if not hasattr(self, "_demo_start_ts"): self._demo_start_ts = now_ts
+                
+                ml_state = self._active_ml_state(now_ts)
+                current_ml_state = str(ml_state.get("cognitive_state", "")) if isinstance(ml_state, dict) else ""
+                
+                # 5 mins if slipping, 30 mins if focused/ideal
+                dyn_limit_sec = 300 if current_ml_state in {"fatigued", "confused", "harmful_confusion"} else 1800
+                
+                if (now_ts - self._demo_start_ts) >= dyn_limit_sec and not getattr(self, "_break_prompted", False):
+                    if dyn_limit_sec == 300:
+                        self.coach.speak("You appear fatigued. You should take a 5-minute break.")
+                    else:
+                        self.coach.speak("You have been deeply focused for 30 minutes. Would you like to take a break?")
+                    self._break_prompted = True
             time_data = self.time_tracker.snapshot()
 
             # ── Derived cursor signals ────────────────────────────────────
@@ -983,6 +1098,25 @@ class ActivityMonitor:
             )
             self._run_ml_inference(now_ts=now_ts, ml_features=ml_features)
             ml_state = self._active_ml_state(now_ts)
+
+            # \u2500\u2500 Camera Fast-Path Override (fires even during ONNX warmup) \u2500\u2500\u2500\u2500
+            # Ensures head-movement and face signals drive state immediately,
+            # without waiting for 5 full ONNX windows to accumulate.
+            if self.camera_enabled:
+                try:
+                    warmup_state = ml_state if isinstance(ml_state, dict) else {
+                        "cognitive_state": "calibrating",
+                        "confusion_friction": 0.0,
+                        "attention_residue": 0.0,
+                        "pre_error_prob": 0.0,
+                        "interruptibility": 0.5,
+                    }
+                    self._apply_camera_override(warmup_state)
+                    self.latest_ml_state = warmup_state
+                    self.last_ml_result_time = now_ts
+                    ml_state = warmup_state
+                except Exception:
+                    pass
 
             # ── Feature vector ────────────────────────────────────────────
             perclos = camera.get("perclos")
@@ -1255,10 +1389,13 @@ class ActivityMonitor:
                 keyboard         = keyboard,
                 camera           = camera,
                 idle_seconds     = idle_seconds,
+                cursor           = cursor,
             )
+
             if state_label != self._last_state_label:
                 self.focus_mode.sync(state_label)
                 self._last_state_label = state_label
+
 
             # ── Store artifact friction ───────────────────────────────────
             self.store.insert("artifacts", {
@@ -1697,32 +1834,67 @@ def _compute_idle_ratio(now, activity_timestamps, window_seconds):
         idle_time += tail
     return round(clamp(idle_time / window_seconds), 3)
 
-def _state_label(*, classifier_state, keyboard, camera, idle_seconds):
-    camera_status = str(camera.get("status", "disabled")).lower()
-    face_detected = bool(camera.get("face_detected", False))
+def _state_label(*, classifier_state, keyboard, camera, idle_seconds, cursor={}):
+    # 1. Internal Persistence Counter
+    if not hasattr(_state_label, "distract_hits"):
+        _state_label.distract_hits = 0
+
+    camera_status    = str(camera.get("status", "disabled")).lower()
+    face_detected    = bool(camera.get("face_detected", False))
     camera_available = camera_status not in {"disabled", "unavailable"}
-    blink_rate = float(camera.get("blink_rate_per_min", 0.0) or 0.0)
-    rigorous_head_movement = bool(camera.get("rigorous_head_movement", False))
-    recent_backspaces = int(keyboard.get("recent_backspace_count_5s", 0) or 0)
-    recent_printable = int(keyboard.get("recent_printable_count_5s", 0) or 0)
+    rigorous_head    = bool(camera.get("rigorous_head_movement", False))
+    head_class       = str(camera.get("head_movement_class", "steady")).lower()
+    cam_expr         = str(camera.get("expression", "neutral")).lower()
+    blink_rate       = float(camera.get("blink_rate_per_min", 0.0) or 0.0)
+    perclos          = float(camera.get("perclos") or 0.0)
 
+    # 2. Activity / Work Priority Signal
+    # Lowered KPM to 30 so even thinking-and-typing is respected
+    kpm                 = float(keyboard.get("keys_per_minute", 0.0) or 0.0)
+    c_speed             = float(cursor.get("cursor_speed", 0.0) or 0.0)
+    recent_backspaces   = int(keyboard.get("recent_backspace_count_5s", 0) or 0)
+    recent_printable    = int(keyboard.get("recent_printable_count_5s", 0) or 0)
+    is_actively_working = (kpm > 30 or c_speed > 200)
+
+    # 3. Persistence Logic for Sudden Movements
+    is_distracted = ("phone" in cam_expr or "distracted" in cam_expr or rigorous_head or head_class == "active")
+    if is_distracted:
+        _state_label.distract_hits += 1
+    else:
+        _state_label.distract_hits = max(0, _state_label.distract_hits - 1)
+
+    # 4. Final State Decisions (Prioritized)
     if idle_seconds > 10:
-        if camera_available and not face_detected:
-            return "user_not_present"
+        if camera_available and not face_detected: return "user_not_present"
         return "deep_focus"
+    
+    if idle_seconds > 5: return "ideal"
 
-    if idle_seconds > 5:
-        return "ideal"
-
-    if recent_backspaces > recent_printable:
+    # --- CAM OVERRIDES ---
+    # Phone is a hard interrupt
+    if ("phone" in cam_expr) and _state_label.distract_hits >= 2:
         return "confused"
 
-    if camera_available and face_detected and (blink_rate > 30 or rigorous_head_movement):
+    # Physical Fatigue (Spiking blink rate or PERCLOS)
+    if camera_available and (blink_rate > 35 or perclos > 0.20):
         return "fatigued"
 
+    # Distraction requires persistence AND no active work
+    if _state_label.distract_hits >= 3 and not is_actively_working:
+        return "confused"
+
+    # --- HEURISTIC OVERRIDES ---
+    # High error rate (more backspaces than letters)
+    if is_actively_working and recent_backspaces > recent_printable:
+        return "confused"
+
+    # ML Classifier fallback
     if classifier_state == "confused":
         return "confused"
+    
     return "focused"
+
+
 
 def _current_goal(active_app, active_window):
     app = active_app.lower()
