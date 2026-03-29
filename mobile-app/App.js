@@ -111,6 +111,9 @@ const SAMPLE_DASHBOARD = {
     avgConfusionRisk: 0.28,
     avgFatigueRisk: 0.18,
     avgInterruptibility: 0.41,
+    deepFocusRate: 19,
+    harmfulConfusionRate: 11,
+    fatigueRate: 9,
   },
   live: {
     current: {
@@ -124,6 +127,26 @@ const SAMPLE_DASHBOARD = {
         interruptibility: 0.33,
       },
     },
+    graph: {
+      stats: {
+        nodeCount: 42,
+        relationCount: 76,
+        dbNodeCount: 42,
+        dbRelationCount: 76,
+        nodeTypes: {
+          user: 1,
+          session: 1,
+          app: 6,
+          window: 8,
+          artifact: 7,
+          state: 5,
+          classifier_state: 3,
+          cursor_state: 4,
+          expression: 3,
+          snapshot: 4,
+        },
+      },
+    },
   },
   analytics: {
     scoreAverages: [
@@ -134,12 +157,30 @@ const SAMPLE_DASHBOARD = {
       { key: "fatigue_risk", label: "Fatigue risk", value: 0.18 },
       { key: "interruptibility", label: "Interruptibility", value: 0.41 },
     ],
+    scoreTimeline: [
+      { timestamp: "09:00", stateLabel: "focused", focusDepth: 0.75, confusionRisk: 0.18, fatigueRisk: 0.11, interruptibility: 0.29 },
+      { timestamp: "09:05", stateLabel: "deep_focus", focusDepth: 0.82, confusionRisk: 0.14, fatigueRisk: 0.10, interruptibility: 0.23 },
+      { timestamp: "09:10", stateLabel: "focused", focusDepth: 0.71, confusionRisk: 0.22, fatigueRisk: 0.13, interruptibility: 0.31 },
+      { timestamp: "09:15", stateLabel: "confused", focusDepth: 0.49, confusionRisk: 0.54, fatigueRisk: 0.19, interruptibility: 0.48 },
+      { timestamp: "09:20", stateLabel: "focused", focusDepth: 0.69, confusionRisk: 0.26, fatigueRisk: 0.18, interruptibility: 0.37 },
+      { timestamp: "09:25", stateLabel: "fatigued", focusDepth: 0.42, confusionRisk: 0.31, fatigueRisk: 0.57, interruptibility: 0.62 },
+      { timestamp: "09:30", stateLabel: "focused", focusDepth: 0.74, confusionRisk: 0.21, fatigueRisk: 0.18, interruptibility: 0.34 },
+      { timestamp: "09:35", stateLabel: "deep_focus", focusDepth: 0.84, confusionRisk: 0.12, fatigueRisk: 0.16, interruptibility: 0.22 },
+    ],
     stateDistribution: [
       { label: "focused", percentage: 48, count: 61 },
       { label: "deep_focus", percentage: 19, count: 24 },
       { label: "confused", percentage: 18, count: 23 },
       { label: "fatigued", percentage: 9, count: 12 },
       { label: "ideal", percentage: 6, count: 8 },
+    ],
+    stateTransitions: [
+      { from: "focused", to: "deep_focus", count: 18 },
+      { from: "deep_focus", to: "focused", count: 16 },
+      { from: "focused", to: "confused", count: 11 },
+      { from: "confused", to: "focused", count: 9 },
+      { from: "focused", to: "fatigued", count: 5 },
+      { from: "fatigued", to: "focused", count: 4 },
     ],
     appBreakdown: [
       { app: "Visual Studio Code", share: 42, avgFocus: 0.78, avgConfusion: 0.18, avgFatigue: 0.14 },
@@ -152,6 +193,18 @@ const SAMPLE_DASHBOARD = {
       { artifactId: "2", artifactLabel: "overlay.py", frictionScore: 0.64, visits: 7, revisits: 4 },
       { artifactId: "3", artifactLabel: "HeroSection.jsx", frictionScore: 0.48, visits: 4, revisits: 2 },
     ],
+    scoreExtremes: {
+      highestFocus: { timestamp: "09:35", stateLabel: "deep_focus", focusDepth: 0.84, confusionRisk: 0.12, fatigueRisk: 0.16, interruptibility: 0.22 },
+      highestConfusion: { timestamp: "09:15", stateLabel: "confused", focusDepth: 0.49, confusionRisk: 0.54, fatigueRisk: 0.19, interruptibility: 0.48 },
+      highestFatigue: { timestamp: "09:25", stateLabel: "fatigued", focusDepth: 0.42, confusionRisk: 0.31, fatigueRisk: 0.57, interruptibility: 0.62 },
+    },
+    alertTotals: {
+      attentionResidue: 7,
+      preError: 5,
+      fatigue: 3,
+      confusionEpisodes: 4,
+      handoffCapsules: 2,
+    },
   },
 };
 
@@ -210,6 +263,37 @@ function ProgressBar({ value, color }) {
   return (
     <View style={styles.progressTrack}>
       <View style={[styles.progressFill, { width: `${Math.max(value * 100, 6)}%`, backgroundColor: color }]} />
+    </View>
+  );
+}
+
+function MetricPill({ label, value, color }) {
+  return (
+    <View style={[styles.metricPill, { borderColor: `${color}55`, backgroundColor: `${color}18` }]}>
+      <Text style={[styles.metricPillValue, { color }]}>{value}</Text>
+      <Text style={styles.metricPillLabel}>{label}</Text>
+    </View>
+  );
+}
+
+function TimelineMiniChart({ timeline }) {
+  const focusValues = (timeline || []).slice(-8);
+  if (!focusValues.length) {
+    return <Text style={styles.featureBody}>No timeline data yet.</Text>;
+  }
+  return (
+    <View style={styles.timelineWrap}>
+      <View style={styles.timelineBars}>
+        {focusValues.map((point, index) => (
+          <View key={`${point.timestamp || index}`} style={styles.timelineColumn}>
+            <View style={styles.timelineTrack}>
+              <View style={[styles.timelineFill, { height: `${Math.max((point.focusDepth || 0) * 100, 10)}%` }]} />
+            </View>
+            <Text style={styles.timelineLabel}>{String(point.timestamp || index).slice(-5)}</Text>
+          </View>
+        ))}
+      </View>
+      <Text style={styles.timelineLegend}>Focus-depth movement over recent snapshots</Text>
     </View>
   );
 }
@@ -334,6 +418,7 @@ function DashboardScreen() {
   const summary = data?.summary || SAMPLE_DASHBOARD.summary;
   const live = data?.live?.current || SAMPLE_DASHBOARD.live.current;
   const analytics = data?.analytics || SAMPLE_DASHBOARD.analytics;
+  const graph = data?.live?.graph || SAMPLE_DASHBOARD.live.graph;
 
   const kpis = useMemo(
     () => [
@@ -355,11 +440,16 @@ function DashboardScreen() {
         <Text style={styles.heroTag}>MOBILE COGNITIVE DASHBOARD</Text>
         <Text style={styles.heroTitle}>Live observer view for{`\n`}NeuroTrace.</Text>
         <Text style={styles.heroBody}>
-          This mobile app mirrors the web dashboard with a compact KPI view, state distribution,
-          app breakdown, and friction hotspots.
+          This mobile app mirrors the web dashboard with the same cognitive data blocks,
+          adapted into a mobile-friendly layout.
         </Text>
         {loading ? <ActivityIndicator color={COLORS.primary} style={{ marginTop: 8 }} /> : null}
         {error ? <Text style={styles.warningText}>{error}</Text> : null}
+        <View style={styles.metricPillRow}>
+          <MetricPill label="Snapshots" value={String(summary.snapshotCount || 0)} color={COLORS.primary} />
+          <MetricPill label="Top state" value={pretty(summary.topState)} color={COLORS.accent} />
+          <MetricPill label="Latest state" value={pretty(summary.latestState)} color={COLORS.warn} />
+        </View>
       </View>
 
       <Section eyebrow="LIVE STATE" title={pretty(live.stateLabel)}>
@@ -379,6 +469,20 @@ function DashboardScreen() {
             </View>
           ))}
         </View>
+      </Section>
+
+      <Section eyebrow="ALERT TOTALS" title="Observer alerts and support events">
+        <View style={styles.metricPillRow}>
+          <MetricPill label="Residue" value={String(analytics.alertTotals?.attentionResidue || 0)} color={COLORS.warn} />
+          <MetricPill label="Pre-error" value={String(analytics.alertTotals?.preError || 0)} color={COLORS.danger} />
+          <MetricPill label="Fatigue" value={String(analytics.alertTotals?.fatigue || 0)} color={COLORS.warn} />
+          <MetricPill label="Confusion ep." value={String(analytics.alertTotals?.confusionEpisodes || 0)} color={COLORS.accent} />
+          <MetricPill label="Handoffs" value={String(analytics.alertTotals?.handoffCapsules || 0)} color={COLORS.sub} />
+        </View>
+      </Section>
+
+      <Section eyebrow="SIGNAL TIMELINE" title="Score movement over time">
+        <TimelineMiniChart timeline={analytics.scoreTimeline || []} />
       </Section>
 
       <Section eyebrow="AVERAGE SCORES" title="Core cognitive scores">
@@ -403,6 +507,37 @@ function DashboardScreen() {
             <ProgressBar value={state.percentage / 100} color={COLORS.accent} />
           </View>
         ))}
+      </Section>
+
+      <Section eyebrow="STATE TRANSITIONS" title="How states flow into each other">
+        {(analytics.stateTransitions || []).map((transition, index) => (
+          <View key={`${transition.from}-${transition.to}-${index}`} style={styles.metricRow}>
+            <View style={styles.metricHeader}>
+              <Text style={styles.metricLabel}>
+                {pretty(transition.from)} → {pretty(transition.to)}
+              </Text>
+              <Text style={styles.metricValue}>{transition.count}</Text>
+            </View>
+            <ProgressBar value={Math.min((transition.count || 0) / 20, 1)} color={COLORS.accent} />
+          </View>
+        ))}
+      </Section>
+
+      <Section eyebrow="GRAPH CONTEXT" title="Observer graph and node inventory">
+        <View style={styles.metricPillRow}>
+          <MetricPill label="Nodes" value={String(graph?.stats?.nodeCount || 0)} color={COLORS.primary} />
+          <MetricPill label="Links" value={String(graph?.stats?.relationCount || 0)} color={COLORS.accent} />
+          <MetricPill label="DB nodes" value={String(graph?.stats?.dbNodeCount || 0)} color={COLORS.warn} />
+          <MetricPill label="DB links" value={String(graph?.stats?.dbRelationCount || 0)} color={COLORS.danger} />
+        </View>
+        <View style={styles.nodePillWrap}>
+          {Object.entries(graph?.stats?.nodeTypes || {}).map(([type, count]) => (
+            <View key={type} style={styles.nodePill}>
+              <Text style={styles.nodePillType}>{type}</Text>
+              <Text style={styles.nodePillCount}>{count}</Text>
+            </View>
+          ))}
+        </View>
       </Section>
 
       <Section eyebrow="APP BREAKDOWN" title="Where cognitive load is happening">
@@ -431,6 +566,27 @@ function DashboardScreen() {
             </View>
             <ProgressBar value={spot.frictionScore} color={COLORS.warn} />
             <Text style={styles.featureBody}>Visits {spot.visits} · Revisits {spot.revisits}</Text>
+          </View>
+        ))}
+      </Section>
+
+      <Section eyebrow="SCORE EXTREMES" title="Peak cognitive moments in the data">
+        {[
+          { label: "Highest Focus", point: analytics.scoreExtremes?.highestFocus, field: "focusDepth", color: COLORS.primary },
+          { label: "Highest Confusion", point: analytics.scoreExtremes?.highestConfusion, field: "confusionRisk", color: COLORS.danger },
+          { label: "Highest Fatigue", point: analytics.scoreExtremes?.highestFatigue, field: "fatigueRisk", color: COLORS.warn },
+        ].map((item) => (
+          <View key={item.label} style={styles.featureCard}>
+            <View style={styles.metricHeader}>
+              <Text style={styles.featureTitle}>{item.label}</Text>
+              <Text style={[styles.metricValue, { color: item.color }]}>
+                {pct(item.point?.[item.field] || 0)}
+              </Text>
+            </View>
+            <Text style={styles.featureBody}>
+              {pretty(item.point?.stateLabel)} · {item.point?.timestamp || "-"}
+            </Text>
+            <ProgressBar value={item.point?.[item.field] || 0} color={item.color} />
           </View>
         ))}
       </Section>
@@ -766,6 +922,29 @@ const styles = StyleSheet.create({
     flexWrap: "wrap",
     gap: 10,
   },
+  metricPillRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 10,
+    marginTop: 8,
+  },
+  metricPill: {
+    borderWidth: 1,
+    borderRadius: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    minWidth: "30%",
+  },
+  metricPillValue: {
+    fontSize: 14,
+    fontWeight: "800",
+    textTransform: "capitalize",
+  },
+  metricPillLabel: {
+    color: COLORS.sub,
+    fontSize: 11,
+    marginTop: 3,
+  },
   kpiCard: {
     width: "48%",
     backgroundColor: COLORS.card,
@@ -812,6 +991,43 @@ const styles = StyleSheet.create({
     height: "100%",
     borderRadius: 999,
   },
+  timelineWrap: {
+    gap: 10,
+  },
+  timelineBars: {
+    flexDirection: "row",
+    alignItems: "flex-end",
+    justifyContent: "space-between",
+    gap: 8,
+    height: 160,
+  },
+  timelineColumn: {
+    flex: 1,
+    alignItems: "center",
+    gap: 8,
+  },
+  timelineTrack: {
+    width: "100%",
+    flex: 1,
+    borderRadius: 999,
+    backgroundColor: "#1a2c3a",
+    justifyContent: "flex-end",
+    overflow: "hidden",
+  },
+  timelineFill: {
+    width: "100%",
+    backgroundColor: COLORS.primary,
+    borderRadius: 999,
+    minHeight: 8,
+  },
+  timelineLabel: {
+    color: COLORS.sub,
+    fontSize: 10,
+  },
+  timelineLegend: {
+    color: COLORS.sub,
+    fontSize: 12,
+  },
   metricStack: {
     gap: 8,
     marginTop: 6,
@@ -819,5 +1035,31 @@ const styles = StyleSheet.create({
   metricTiny: {
     color: COLORS.sub,
     fontSize: 12,
+  },
+  nodePillWrap: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 10,
+  },
+  nodePill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 999,
+    backgroundColor: COLORS.card,
+    borderWidth: 1,
+    borderColor: COLORS.line,
+  },
+  nodePillType: {
+    color: COLORS.text,
+    fontSize: 12,
+    textTransform: "uppercase",
+  },
+  nodePillCount: {
+    color: COLORS.primary,
+    fontSize: 12,
+    fontWeight: "700",
   },
 });
