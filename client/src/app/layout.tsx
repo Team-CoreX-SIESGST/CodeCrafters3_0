@@ -5,6 +5,7 @@ import { ThemeProvider } from "@/components/ui/theme-provider";
 import { AuthProvider } from "@/contexts/auth-context";
 import { Toaster } from "@/components/ui/sonner";
 import { Analytics } from "@vercel/analytics/next";
+import { RouteTransition } from "@/components/route-transition";
 
 const epilogue = Epilogue({
   variable: "--font-epilogue",
@@ -56,7 +57,7 @@ export default function RootLayout({
         >
           <div className="relative min-h-full">
             <AuthProvider>
-              {children}
+              <RouteTransition>{children}</RouteTransition>
               <Toaster position="top-center" richColors />
               <Analytics />
             </AuthProvider>

@@ -7,6 +7,8 @@ import { useAuth } from "@/contexts/auth-context";
 
 const navLinks = ["Problem", "Features", "How It Works", "Demo"];
 
+const sectionHref = (label) => `/#${label.toLowerCase().replace(/\s/g, "-")}`;
+
 const Navbar = () => {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
@@ -38,29 +40,30 @@ const Navbar = () => {
     >
       <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-3">
         {/* Logo */}
-        <div className="flex items-center gap-2">
-          <img
-            src="/main-logo.png"
-            alt="NeuroTrace logo"
-            className="h-8 w-8 rounded-md"
-          />
-          <span className="font-serif text-lg text-foreground font-semibold tracking-tight">
-            NeuroTrace
-          </span>
-        </div>
+        
+<Link href="/" className="flex items-center gap-2">
+  <img
+    src="/main-logo.png"
+    alt="NeuroTrace logo"
+    className="h-8 w-8 rounded-md"
+  />
+  <span className="font-serif text-lg text-foreground font-semibold tracking-tight">
+    NeuroTrace
+  </span>
+</Link>
 
         {/* Desktop Links */}
         <div className="hidden md:flex items-center gap-8">
           {navLinks.map((link) => (
             <a
               key={link}
-              href={`#${link.toLowerCase().replace(/\s/g, "-")}`}
+              href={sectionHref(link)}
               className="text-sm text-muted-foreground transition-colors hover:text-foreground"
             >
               {link}
             </a>
           ))}
-          <a href="#about" className="text-sm text-muted-foreground transition-colors hover:text-foreground">
+          <a href="/#about" className="text-sm text-muted-foreground transition-colors hover:text-foreground">
             About
           </a>
         </div>
@@ -74,7 +77,7 @@ const Navbar = () => {
             Dashboard
           </Link>
           <a
-            href="#demo"
+            href="/#demo"
             className="btn-primary !py-2 !px-5 text-sm animate-glow-pulse"
           >
             See It in Action
@@ -165,17 +168,17 @@ const Navbar = () => {
           {navLinks.map((link) => (
             <a
               key={link}
-              href={`#${link.toLowerCase().replace(/\s/g, "-")}`}
+              href={sectionHref(link)}
               className="text-sm text-muted-foreground"
               onClick={() => setMobileOpen(false)}
             >
               {link}
             </a>
           ))}
-          <a href="#about" className="text-sm text-muted-foreground" onClick={() => setMobileOpen(false)}>
+          <a href="/#about" className="text-sm text-muted-foreground" onClick={() => setMobileOpen(false)}>
             About
           </a>
-          <a href="#demo" className="btn-primary !py-2 !px-5 text-sm text-center">
+          <a href="/#demo" className="btn-primary !py-2 !px-5 text-sm text-center">
             See It in Action
           </a>
           <Link

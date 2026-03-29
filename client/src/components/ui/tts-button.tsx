@@ -8,6 +8,36 @@ type TTSButtonProps = {
     content: string
 }
 
+function pickPreferredVoice(voices: SpeechSynthesisVoice[]): SpeechSynthesisVoice | undefined {
+    const normalized = voices.map((voice) => ({
+        voice,
+        name: voice.name.toLowerCase(),
+        lang: voice.lang.toLowerCase(),
+    }))
+
+    const priorities = [
+        (entry: { voice: SpeechSynthesisVoice; name: string; lang: string }) =>
+            entry.lang === "en-in" || entry.lang.startsWith("en-in"),
+        (entry: { voice: SpeechSynthesisVoice; name: string; lang: string }) =>
+            entry.name.includes("india") || entry.name.includes("indian"),
+        (entry: { voice: SpeechSynthesisVoice; name: string; lang: string }) =>
+            entry.name.includes("heera") || entry.name.includes("ravi") || entry.name.includes("prabhat"),
+        (entry: { voice: SpeechSynthesisVoice; name: string; lang: string }) =>
+            entry.name.includes("google english india"),
+        (entry: { voice: SpeechSynthesisVoice; name: string; lang: string }) =>
+            entry.lang.startsWith("en"),
+    ]
+
+    for (const matcher of priorities) {
+        const match = normalized.find(matcher)
+        if (match) {
+            return match.voice
+        }
+    }
+
+    return voices[0]
+}
+
 function stripMarkdown(md: string): string {
     if (!md) return ""
     // Basic markdown stripping
@@ -58,12 +88,13 @@ export function TTSButton({ content }: TTSButtonProps) {
 
         const newUtterance = new SpeechSynthesisUtterance(textToSpeak)
 
-        // Attempt to set a good voice
+        // Prefer Indian English voices when available.
         const voices = window.speechSynthesis.getVoices()
-        const preferredVoice = voices.find(v => v.name.includes("Google US English") || v.name.includes("Microsoft Zira")) || voices[0]
+        const preferredVoice = pickPreferredVoice(voices)
         if (preferredVoice) {
             newUtterance.voice = preferredVoice
         }
+        newUtterance.lang = preferredVoice?.lang || "en-IN"
 
         newUtterance.onstart = () => {
             setIsPlaying(true)
