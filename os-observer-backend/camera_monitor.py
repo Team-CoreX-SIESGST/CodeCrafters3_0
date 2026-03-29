@@ -50,7 +50,7 @@ BLINK_ROLLING_WINDOW_S = 60.0
 HEAD_MOVEMENT_WINDOW_S = 5.0
 
 BROW_FURROW_RATIO = 0.88
-BROW_RAISE_RATIO  = 1.14
+BROW_RAISE_RATIO  = 1.08  # Lowered from 1.14 to make 'surprised' easier to trigger!
 EAR_SQUINT_RATIO  = 0.85
 RIGOROUS_HEAD_MOVEMENT_THRESHOLD = 0.12
 
@@ -94,6 +94,11 @@ class CameraMonitor:
 
         self._stop_event = threading.Event()
         self._thread: Optional[threading.Thread] = None
+        self.latest_frame_rgb = None
+
+    def get_latest_frame(self):
+        with self._lock:
+            return self.latest_frame_rgb
 
     def start(self) -> None:
         if self._thread and self._thread.is_alive():
@@ -181,17 +186,14 @@ class CameraMonitor:
 
                 self._frames_processed += 1
                 
-                # --- NEW: Display the live video feed ---
-                cv2.imshow("Flow Guardian - Live Camera Feed", frame)
-                if cv2.waitKey(1) & 0xFF == ord('q'):
-                    self._stop_event.set()
-                    break
-                # ----------------------------------------
-                
                 if now - last_sample_at < self.sample_interval_seconds:
                     continue
 
                 rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                
+                with self._lock:
+                    self.latest_frame_rgb = rgb.copy()
+                    
                 res = face_mesh.process(rgb)
                 lm = res.multi_face_landmarks[0].landmark if res.multi_face_landmarks else None
 
@@ -225,10 +227,6 @@ class CameraMonitor:
         finally:
             face_mesh.close()
             cap.release()
-            try:
-                cv2.destroyAllWindows()
-            except Exception:
-                pass
 
     def _update_blink_state(self, ear: float, threshold: float, now: float) -> None:
         closing = ear < threshold

@@ -44,7 +44,11 @@ def main() -> None:
     )
     api_thread.start()
 
-    overlay = StatusOverlay(payload_provider=monitor.snapshot, refresh_ms=200)
+    overlay = StatusOverlay(
+        payload_provider=monitor.snapshot, 
+        camera_provider=monitor.camera_monitor.get_latest_frame, 
+        refresh_ms=100
+    )
 
     try:
         overlay.run()
