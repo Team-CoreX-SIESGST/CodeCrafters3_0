@@ -55,6 +55,12 @@ export async function upsertRecords(records, namespace) {
   await index.namespace(ns).upsertRecords({ records });
 }
 
+export async function clearNamespace(namespace) {
+  const index = getPineconeIndex();
+  const ns = namespace || process.env.PINECONE_NAMESPACE || "default";
+  await index.deleteAll({ namespace: ns });
+}
+
 /**
  * Query Pinecone for the top-K nearest neighbours.
  * @param {number[]} embedding  - query embedding vector
@@ -97,6 +103,8 @@ export async function searchPineconeByText(queryText, topK = 5, filter = undefin
       "recordType",
       "occurredAt",
       "userId",
+      "sessionId",
+      "snapshotId",
       "stateLabel",
       "cursorState",
       "activeApp",
@@ -110,6 +118,19 @@ export async function searchPineconeByText(queryText, topK = 5, filter = undefin
       "label",
       "message",
       "status",
+      "severity",
+      "type",
+      "count",
+      "fromState",
+      "toState",
+      "currentGoal",
+      "likelyNextStep",
+      "blockerNote",
+      "focusForecast",
+      "classifierState",
+      "fromContext",
+      "toContext",
+      "chunkText",
       "peakConfusion",
       "durationS",
       "summary",

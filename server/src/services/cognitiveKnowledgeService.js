@@ -12,14 +12,69 @@ const KNOWLEDGE_COLLECTIONS = [
     sort: { created_at: -1 },
   },
   {
+    name: "cognitive_state_changes",
+    label: "state_change",
+    sort: { changed_at: -1 },
+  },
+  {
     name: "cognitive_artifacts",
     label: "artifact",
+    sort: { created_at: -1 },
+  },
+  {
+    name: "cognitive_capsules",
+    label: "capsule",
+    sort: { created_at: -1 },
+  },
+  {
+    name: "cognitive_interruptions",
+    label: "interruption",
+    sort: { created_at: -1 },
+  },
+  {
+    name: "cognitive_attention_residue_events",
+    label: "attention_residue_event",
+    sort: { created_at: -1 },
+  },
+  {
+    name: "cognitive_pre_error_events",
+    label: "pre_error_event",
+    sort: { created_at: -1 },
+  },
+  {
+    name: "cognitive_fatigue_events",
+    label: "fatigue_event",
     sort: { created_at: -1 },
   },
   {
     name: "cognitive_confusion_episodes",
     label: "episode",
     sort: { started_at: -1, created_at: -1 },
+  },
+  {
+    name: "cognitive_handoff_capsules",
+    label: "handoff_capsule",
+    sort: { created_at: -1 },
+  },
+  {
+    name: "cognitive_sessions",
+    label: "session",
+    sort: { last_seen_at: -1, started_at: -1, created_at: -1 },
+  },
+  {
+    name: "cognitive_activity_stream",
+    label: "activity_stream",
+    sort: { created_at: -1 },
+  },
+  {
+    name: "cognitive_context_chunks",
+    label: "context_chunk",
+    sort: { created_at: -1 },
+  },
+  {
+    name: "cognitive_focus_events",
+    label: "focus_event",
+    sort: { created_at: -1 },
   },
   {
     name: "cognitive_entities",
@@ -111,6 +166,28 @@ function buildEventRecord(doc) {
   };
 }
 
+function buildStateChangeRecord(doc) {
+  const text = [
+    `State change for user ${doc.user_id || "unknown"} at ${stringifyValue(doc.changed_at)}.`,
+    `Transitioned from ${doc.from_state || "unknown"} to ${doc.to_state || "unknown"}.`,
+  ]
+    .filter(Boolean)
+    .join(" ");
+
+  return {
+    id: `state_change:${doc._id}`,
+    text,
+    source: "cognitive_state_changes",
+    collection: "cognitive_state_changes",
+    recordType: "state_change",
+    userId: doc.user_id || "",
+    fromState: doc.from_state || "",
+    toState: doc.to_state || "",
+    stateLabel: doc.to_state || "",
+    occurredAt: stringifyValue(doc.changed_at),
+  };
+}
+
 function buildArtifactRecord(doc) {
   const text = [
     `Cognitive artifact for user ${doc.user_id || "unknown"} at ${stringifyValue(doc.created_at)}.`,
@@ -133,6 +210,92 @@ function buildArtifactRecord(doc) {
     artifactLabel: doc.artifact_label || "",
     activeApp: doc.active_app || "",
     activeWindow: doc.active_window || "",
+    occurredAt: stringifyValue(doc.created_at),
+  };
+}
+
+function buildCapsuleRecord(doc, { collectionName, recordType }) {
+  const text = [
+    `${recordType === "handoff_capsule" ? "Handoff" : "Recovery"} capsule for user ${doc.user_id || "unknown"} at ${stringifyValue(doc.created_at)}.`,
+    doc.artifact_label ? `Artifact ${doc.artifact_label}.` : "",
+    doc.current_goal ? `Current goal: ${doc.current_goal}.` : "",
+    doc.likely_next_step ? `Likely next step: ${doc.likely_next_step}.` : "",
+    doc.focus_forecast !== undefined ? `Focus forecast ${stringifyValue(doc.focus_forecast)}.` : "",
+    doc.blocker_note ? `Blocker note: ${doc.blocker_note}.` : "",
+    doc.type ? `Capsule type ${doc.type}.` : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+
+  return {
+    id: `${recordType}:${doc._id}`,
+    text,
+    source: collectionName,
+    collection: collectionName,
+    recordType,
+    userId: doc.user_id || "",
+    artifactLabel: doc.artifact_label || "",
+    type: doc.type || "",
+    currentGoal: doc.current_goal || "",
+    likelyNextStep: doc.likely_next_step || "",
+    blockerNote: doc.blocker_note || "",
+    focusForecast: stringifyValue(doc.focus_forecast),
+    occurredAt: stringifyValue(doc.created_at),
+  };
+}
+
+function buildInterruptionRecord(doc) {
+  const itemSources = Array.isArray(doc.items)
+    ? doc.items
+        .map((item) => item?.source)
+        .filter(Boolean)
+        .join(", ")
+    : "";
+  const text = [
+    `Interruption batch for user ${doc.user_id || "unknown"} at ${stringifyValue(doc.created_at)}.`,
+    doc.summary ? `Summary: ${doc.summary}.` : "",
+    doc.count !== undefined ? `Count ${doc.count}.` : "",
+    itemSources ? `Sources: ${itemSources}.` : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+
+  return {
+    id: `interruption:${doc._id}`,
+    text,
+    source: "cognitive_interruptions",
+    collection: "cognitive_interruptions",
+    recordType: "interruption",
+    userId: doc.user_id || "",
+    summary: doc.summary || "",
+    count: stringifyValue(doc.count),
+    occurredAt: stringifyValue(doc.created_at),
+  };
+}
+
+function buildRiskEventRecord(doc, { collectionName, recordType, metricField, label }) {
+  const metricValue = stringifyValue(doc[metricField]);
+  const text = [
+    `${label} for user ${doc.user_id || "unknown"} at ${stringifyValue(doc.created_at)}.`,
+    metricValue ? `${label} value ${metricValue}.` : "",
+    doc.severity ? `Severity ${doc.severity}.` : "",
+    doc.active_app ? `Active app ${doc.active_app}.` : "",
+    doc.active_window ? `Active window ${doc.active_window}.` : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+
+  return {
+    id: `${recordType}:${doc._id}`,
+    text,
+    source: collectionName,
+    collection: collectionName,
+    recordType,
+    userId: doc.user_id || "",
+    activeApp: doc.active_app || "",
+    activeWindow: doc.active_window || "",
+    severity: doc.severity || "",
+    metricValue,
     occurredAt: stringifyValue(doc.created_at),
   };
 }
@@ -161,6 +324,116 @@ function buildConfusionEpisodeRecord(doc) {
     activeApp: doc.active_app || "",
     activeWindow: doc.active_window || "",
     occurredAt: stringifyValue(doc.started_at || doc.created_at),
+  };
+}
+
+function buildSessionRecord(doc) {
+  const text = [
+    `Session ${doc.session_id || "unknown"} for user ${doc.user_id || "unknown"}.`,
+    doc.started_at ? `Started at ${stringifyValue(doc.started_at)}.` : "",
+    doc.last_seen_at ? `Last seen at ${stringifyValue(doc.last_seen_at)}.` : "",
+    doc.state_label ? `Current state ${doc.state_label}.` : "",
+    doc.active_app ? `Active app ${doc.active_app}.` : "",
+    doc.active_window ? `Active window ${doc.active_window}.` : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+
+  return {
+    id: `session:${doc._id}`,
+    text,
+    source: "cognitive_sessions",
+    collection: "cognitive_sessions",
+    recordType: "session",
+    userId: doc.user_id || "",
+    sessionId: doc.session_id || "",
+    stateLabel: doc.state_label || "",
+    activeApp: doc.active_app || "",
+    activeWindow: doc.active_window || "",
+    artifactId: doc.artifact_id || "",
+    occurredAt: stringifyValue(doc.last_seen_at || doc.started_at || doc.created_at),
+  };
+}
+
+function buildActivityStreamRecord(doc) {
+  const scores = Object.entries(doc.metrics?.scores || {})
+    .map(([key, value]) => `${key} ${stringifyValue(value)}`)
+    .join(", ");
+  const text = [
+    `Activity stream entry for user ${doc.user_id || "unknown"} at ${stringifyValue(doc.created_at)}.`,
+    doc.session_id ? `Session ${doc.session_id}.` : "",
+    doc.snapshot_id ? `Snapshot ${doc.snapshot_id}.` : "",
+    scores ? `Scores: ${scores}.` : "",
+    doc.metrics?.keyboard ? `Keyboard metrics: ${stringifyValue(doc.metrics.keyboard)}.` : "",
+    doc.metrics?.mouse ? `Mouse metrics: ${stringifyValue(doc.metrics.mouse)}.` : "",
+    doc.metrics?.camera ? `Camera metrics: ${stringifyValue(doc.metrics.camera)}.` : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+
+  return {
+    id: `activity_stream:${doc._id}`,
+    text,
+    source: "cognitive_activity_stream",
+    collection: "cognitive_activity_stream",
+    recordType: "activity_stream",
+    userId: doc.user_id || "",
+    sessionId: doc.session_id || "",
+    snapshotId: doc.snapshot_id || "",
+    occurredAt: stringifyValue(doc.created_at),
+  };
+}
+
+function buildContextChunkRecord(doc) {
+  const chunkText = stringifyValue(doc.chunk_text);
+  const text = [
+    `Context chunk for user ${doc.user_id || "unknown"} at ${stringifyValue(doc.created_at)}.`,
+    doc.state_label ? `State ${doc.state_label}.` : "",
+    chunkText,
+  ]
+    .filter(Boolean)
+    .join(" ");
+
+  return {
+    id: `context_chunk:${doc._id}`,
+    text,
+    source: "cognitive_context_chunks",
+    collection: "cognitive_context_chunks",
+    recordType: "context_chunk",
+    userId: doc.user_id || "",
+    sessionId: doc.session_id || "",
+    stateLabel: doc.state_label || "",
+    chunkText,
+    occurredAt: stringifyValue(doc.created_at),
+  };
+}
+
+function buildFocusEventRecord(doc) {
+  const fromContext = stringifyValue(doc.from_context);
+  const toContext = stringifyValue(doc.to_context);
+  const text = [
+    `Focus transition for user ${doc.user_id || "unknown"} at ${stringifyValue(doc.created_at)}.`,
+    doc.state_label ? `State ${doc.state_label}.` : "",
+    doc.classifier_state ? `Classifier state ${doc.classifier_state}.` : "",
+    fromContext ? `From: ${fromContext}.` : "",
+    toContext ? `To: ${toContext}.` : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+
+  return {
+    id: `focus_event:${doc._id}`,
+    text,
+    source: "cognitive_focus_events",
+    collection: "cognitive_focus_events",
+    recordType: "focus_event",
+    userId: doc.user_id || "",
+    sessionId: doc.session_id || "",
+    stateLabel: doc.state_label || "",
+    classifierState: doc.classifier_state || "",
+    fromContext,
+    toContext,
+    occurredAt: stringifyValue(doc.created_at),
   };
 }
 
@@ -222,10 +495,53 @@ export function buildKnowledgeRecord(collectionName, doc) {
       return buildSnapshotRecord(doc);
     case "cognitive_events":
       return buildEventRecord(doc);
+    case "cognitive_state_changes":
+      return buildStateChangeRecord(doc);
     case "cognitive_artifacts":
       return buildArtifactRecord(doc);
+    case "cognitive_capsules":
+      return buildCapsuleRecord(doc, {
+        collectionName,
+        recordType: "capsule",
+      });
+    case "cognitive_interruptions":
+      return buildInterruptionRecord(doc);
+    case "cognitive_attention_residue_events":
+      return buildRiskEventRecord(doc, {
+        collectionName,
+        recordType: "attention_residue_event",
+        metricField: "attention_residue",
+        label: "Attention residue event",
+      });
+    case "cognitive_pre_error_events":
+      return buildRiskEventRecord(doc, {
+        collectionName,
+        recordType: "pre_error_event",
+        metricField: "pre_error_risk",
+        label: "Pre-error risk event",
+      });
+    case "cognitive_fatigue_events":
+      return buildRiskEventRecord(doc, {
+        collectionName,
+        recordType: "fatigue_event",
+        metricField: "fatigue_risk",
+        label: "Fatigue risk event",
+      });
     case "cognitive_confusion_episodes":
       return buildConfusionEpisodeRecord(doc);
+    case "cognitive_handoff_capsules":
+      return buildCapsuleRecord(doc, {
+        collectionName,
+        recordType: "handoff_capsule",
+      });
+    case "cognitive_sessions":
+      return buildSessionRecord(doc);
+    case "cognitive_activity_stream":
+      return buildActivityStreamRecord(doc);
+    case "cognitive_context_chunks":
+      return buildContextChunkRecord(doc);
+    case "cognitive_focus_events":
+      return buildFocusEventRecord(doc);
     case "cognitive_entities":
       return buildEntityRecord(doc);
     case "cognitive_relations":

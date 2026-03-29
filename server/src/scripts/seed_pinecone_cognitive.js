@@ -4,18 +4,13 @@ import mongoose from "mongoose";
 import connectDB from "../config/db.js";
 import { syncCognitiveGraphMaterialized } from "../services/cognitiveGraphSyncService.js";
 import { streamCognitiveKnowledgeRecords } from "../services/cognitiveKnowledgeService.js";
-import { getPineconeIndex, upsertRecords } from "../helpers/pineconeClient.js";
+import { clearNamespace, getPineconeIndex, upsertRecords } from "../helpers/pineconeClient.js";
 
 const namespace = process.env.PINECONE_NAMESPACE || "default";
 const batchSize = 90;
 const rateLimitDelayMs = 65_000;
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-
-async function getAlreadyIndexedCount() {
-  const stats = await getPineconeIndex().describeIndexStats();
-  return stats.namespaces?.[namespace]?.recordCount || 0;
-}
 
 async function upsertWithRetry(records) {
   for (;;) {
@@ -39,33 +34,26 @@ async function seed() {
   const graphSync = await syncCognitiveGraphMaterialized({ force: true });
   console.log("Graph materialization sync:", graphSync);
 
-  const alreadyIndexed = await getAlreadyIndexedCount();
-  console.log(`Existing Pinecone records in namespace ${namespace}: ${alreadyIndexed}`);
+  const existingStats = await getPineconeIndex().describeIndexStats();
+  const existingCount = existingStats.namespaces?.[namespace]?.recordCount || 0;
+  console.log(`Existing Pinecone records in namespace ${namespace}: ${existingCount}`);
+  console.log(`Clearing Pinecone namespace ${namespace} before reseeding...`);
+  await clearNamespace(namespace);
 
   let upserted = 0;
   let batches = 0;
-  let streamed = 0;
 
   try {
     for await (const batch of streamCognitiveKnowledgeRecords(batchSize)) {
-      streamed += batch.length;
-      if (streamed <= alreadyIndexed) {
-        continue;
-      }
-
-      const overlap = Math.max(0, alreadyIndexed - (streamed - batch.length));
-      const recordsToWrite = overlap > 0 ? batch.slice(overlap) : batch;
-      if (recordsToWrite.length === 0) {
-        continue;
-      }
-
-      await upsertWithRetry(recordsToWrite);
-      upserted += recordsToWrite.length;
+      await upsertWithRetry(batch);
+      upserted += batch.length;
       batches += 1;
-      console.log(`Batch ${batches}: upserted ${recordsToWrite.length} records (new total ${alreadyIndexed + upserted})`);
+      console.log(`Batch ${batches}: upserted ${batch.length} records (new total ${upserted})`);
     }
 
-    console.log(`Seed complete. Namespace=${namespace}, newly upserted=${upserted}, total records=${alreadyIndexed + upserted}`);
+    const finalStats = await getPineconeIndex().describeIndexStats();
+    const finalCount = finalStats.namespaces?.[namespace]?.recordCount || 0;
+    console.log(`Seed complete. Namespace=${namespace}, upserted=${upserted}, Pinecone total=${finalCount}`);
   } finally {
     await mongoose.disconnect();
   }

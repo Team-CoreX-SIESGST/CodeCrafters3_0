@@ -4,7 +4,7 @@
 import "../config/env.js";
 import crypto from "crypto";
 import { Groq } from "groq-sdk";
-import { upsertRecords, searchPineconeByText } from "../helpers/pineconeClient.js";
+import { clearNamespace, upsertRecords, searchPineconeByText } from "../helpers/pineconeClient.js";
 import ChatConversation from "../models/ChatConversation.js";
 import {
   getCognitiveKnowledgeStats,
@@ -39,6 +39,8 @@ function buildRecordContext(chunk) {
     metadata.recordType ? `Record type: ${metadata.recordType}` : "",
     metadata.occurredAt ? `Occurred at: ${metadata.occurredAt}` : "",
     metadata.userId ? `User: ${metadata.userId}` : "",
+    metadata.sessionId ? `Session: ${metadata.sessionId}` : "",
+    metadata.snapshotId ? `Snapshot: ${metadata.snapshotId}` : "",
     metadata.stateLabel ? `State label: ${metadata.stateLabel}` : "",
     metadata.cursorState ? `Cursor state: ${metadata.cursorState}` : "",
     metadata.activeApp ? `Active app: ${metadata.activeApp}` : "",
@@ -50,8 +52,16 @@ function buildRecordContext(chunk) {
     metadata.entityId ? `Entity id: ${metadata.entityId}` : "",
     metadata.relationType ? `Relation type: ${metadata.relationType}` : "",
     metadata.status ? `Status: ${metadata.status}` : "",
+    metadata.severity ? `Severity: ${metadata.severity}` : "",
+    metadata.type ? `Type: ${metadata.type}` : "",
+    metadata.fromState ? `From state: ${metadata.fromState}` : "",
+    metadata.toState ? `To state: ${metadata.toState}` : "",
+    metadata.currentGoal ? `Current goal: ${metadata.currentGoal}` : "",
+    metadata.likelyNextStep ? `Likely next step: ${metadata.likelyNextStep}` : "",
+    metadata.classifierState ? `Classifier state: ${metadata.classifierState}` : "",
     metadata.peakConfusion ? `Peak confusion: ${metadata.peakConfusion}` : "",
     metadata.durationS ? `Duration seconds: ${metadata.durationS}` : "",
+    metadata.count ? `Count: ${metadata.count}` : "",
     metadata.label ? `Label: ${metadata.label}` : "",
     metadata.summary ? `Summary: ${metadata.summary}` : "",
     metadata.message ? `Message: ${metadata.message}` : "",
@@ -149,6 +159,8 @@ function normalizeSourcePreview(chunk) {
     recordType: metadata.recordType || "",
     occurredAt: metadata.occurredAt || "",
     userId: metadata.userId || "",
+    sessionId: metadata.sessionId || "",
+    snapshotId: metadata.snapshotId || "",
     stateLabel: metadata.stateLabel || "",
     cursorState: metadata.cursorState || "",
     activeApp: metadata.activeApp || "",
@@ -160,6 +172,19 @@ function normalizeSourcePreview(chunk) {
     entityId: metadata.entityId || "",
     relationType: metadata.relationType || "",
     status: metadata.status || "",
+    severity: metadata.severity || "",
+    type: metadata.type || "",
+    fromState: metadata.fromState || "",
+    toState: metadata.toState || "",
+    currentGoal: metadata.currentGoal || "",
+    likelyNextStep: metadata.likelyNextStep || "",
+    blockerNote: metadata.blockerNote || "",
+    focusForecast: metadata.focusForecast || "",
+    classifierState: metadata.classifierState || "",
+    fromContext: metadata.fromContext || "",
+    toContext: metadata.toContext || "",
+    chunkText: metadata.chunkText || "",
+    count: metadata.count || "",
     peakConfusion: metadata.peakConfusion || "",
     durationS: metadata.durationS || "",
     label: metadata.label || "",
@@ -359,9 +384,14 @@ export async function getPineconeKnowledgeStats(req, res) {
 export async function seedCognitiveKnowledge(req, res) {
   try {
     const namespace = req.body?.namespace || process.env.PINECONE_NAMESPACE || "default";
+    const fullRefresh = req.body?.fullRefresh !== false;
     const graphSync = await syncCognitiveGraphMaterialized({ force: true });
     let upserted = 0;
     let batches = 0;
+
+    if (fullRefresh) {
+      await clearNamespace(namespace);
+    }
 
     for await (const batch of streamCognitiveKnowledgeRecords(PINECONE_RECORD_BATCH_SIZE)) {
       await upsertRecords(batch, namespace);
@@ -372,6 +402,7 @@ export async function seedCognitiveKnowledge(req, res) {
     res.json({
       success: true,
       namespace,
+      fullRefresh,
       graphSync,
       upserted,
       batches,

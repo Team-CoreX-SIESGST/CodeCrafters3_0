@@ -31,22 +31,50 @@ const METRIC_COLS = ['#34b27b', '#ef4444', '#f59e0b', '#fbbf24', '#22d3ee', '#a7
 
 export default function DashboardLoadingSplash({ onDone, minDuration = 2800, dataReady = false }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const startTimeRef = useRef(0);
+  const fadeTimerRef = useRef<number | null>(null);
   const [progress, setProgress] = useState(0);
   const [stepIdx, setStepIdx]     = useState(0);
   const [fadeOut, setFadeOut]     = useState(false);
   const [metricVals, setMetricVals] = useState(METRICS.map(() => Math.random() * 0.6 + 0.1));
 
+  useEffect(() => {
+    startTimeRef.current = performance.now();
+  }, []);
+
   /* ── progress ticker ────────────────────────────────────── */
   useEffect(() => {
-    let pct = 0;
     const id = setInterval(() => {
-      pct = Math.min(100, pct + Math.random() * 2.8 + 0.8);
-      setProgress(pct);
-      const si = STEPS.findIndex(s => s.pct >= Math.round(pct));
-      setStepIdx(Math.max(0, si === -1 ? STEPS.length - 1 : si));
+      const elapsed = performance.now() - startTimeRef.current;
+      const minDurationReached = elapsed >= minDuration;
+
+      setProgress((prev) => {
+        const target = dataReady ? (minDurationReached ? 100 : 97) : 94;
+        const remaining = Math.max(0, target - prev);
+        if (remaining <= 0) return prev;
+
+        const baseAdvance = dataReady
+          ? minDurationReached
+            ? Math.max(1.8, remaining * 0.42)
+            : Math.max(0.14, remaining * 0.06)
+          : Math.max(0.35, remaining * 0.05);
+        const jitter = dataReady
+          ? minDurationReached
+            ? Math.random() * 0.7
+            : Math.random() * 0.15
+          : Math.random() * 1.4;
+
+        return Math.min(target, prev + baseAdvance + jitter);
+      });
     }, 55);
+
     return () => clearInterval(id);
-  }, []);
+  }, [dataReady, minDuration]);
+
+  useEffect(() => {
+    const si = STEPS.findIndex((s) => s.pct >= Math.round(progress));
+    setStepIdx(Math.max(0, si === -1 ? STEPS.length - 1 : si));
+  }, [progress]);
 
   /* ── animate metric values ──────────────────────────────── */
   useEffect(() => {
@@ -58,16 +86,29 @@ export default function DashboardLoadingSplash({ onDone, minDuration = 2800, dat
 
   /* ── exit sequence ──────────────────────────────────────── */
   useEffect(() => {
-    if (!dataReady) return;
-    const id = setTimeout(() => setFadeOut(true), Math.max(0, minDuration - 400));
-    return () => clearTimeout(id);
-  }, [dataReady, minDuration]);
+    if (fadeOut || !dataReady || progress < 100) return;
+    if (performance.now() - startTimeRef.current < minDuration) return;
+    if (fadeTimerRef.current !== null) return;
+
+    fadeTimerRef.current = window.setTimeout(() => {
+      setFadeOut(true);
+      fadeTimerRef.current = null;
+    }, 140);
+  }, [dataReady, fadeOut, minDuration, progress]);
 
   useEffect(() => {
     if (!fadeOut) return;
-    const id = setTimeout(onDone, 500);
+    const id = window.setTimeout(onDone, 420);
     return () => clearTimeout(id);
   }, [fadeOut, onDone]);
+
+  useEffect(() => {
+    return () => {
+      if (fadeTimerRef.current !== null) {
+        clearTimeout(fadeTimerRef.current);
+      }
+    };
+  }, []);
 
   /* ═══════════════════════════════════════════════════════════
      CANVAS — HEX GRID + SONAR SWEEP + EEG WAVEFORMS
