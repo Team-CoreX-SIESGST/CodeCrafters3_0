@@ -1,6 +1,6 @@
 'use client';
 
-import { type ReactNode, useEffect, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useState } from "react";
 import {
   Activity,
   AlertTriangle,
@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import Navbar from "@/components/Navbar";
 import AnalyticsNodeGraph from "@/components/dashboard/AnalyticsNodeGraph";
+import DashboardLoadingSplash from "@/components/dashboard/DashboardLoadingSplash";
 import { SERVER_URL } from "@/utils/commonHelper";
 
 const DASHBOARD_URL = `${SERVER_URL}/api/cognitive/dashboard`;
@@ -444,6 +445,9 @@ export default function DashboardPage() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [nonce, setNonce] = useState(0);
+  const [showSplash, setShowSplash] = useState(true);
+  const [dataReady, setDataReady]   = useState(false);
+  const handleSplashDone = useCallback(() => setShowSplash(false), []);
 
   useEffect(() => {
     let active = true;
@@ -457,7 +461,7 @@ export default function DashboardPage() {
       } catch (e) {
         if (active) setError(e instanceof Error ? e.message : "Unable to load dashboard.");
       } finally {
-        if (active) { setLoading(false); setRefreshing(false); }
+        if (active) { setLoading(false); setRefreshing(false); setDataReady(true); }
       }
     };
     load();
@@ -471,6 +475,14 @@ export default function DashboardPage() {
 
   return (
     <div className="min-h-screen bg-[linear-gradient(180deg,#05090f_0%,#0a1219_45%,#081018_100%)] text-white">
+      {/* ── loading splash (full-page, replaces the old "Loading from MongoDB" text) ── */}
+      {showSplash && (
+        <DashboardLoadingSplash
+          onDone={handleSplashDone}
+          dataReady={dataReady}
+          minDuration={2400}
+        />
+      )}
       <Navbar />
       <main className="mx-auto max-w-7xl px-6 pb-16 pt-28">
 
@@ -495,9 +507,8 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {loading ? (
-          <div className="rounded-[2rem] border border-white/10 bg-white/[0.04] p-8 text-slate-300">Loading from MongoDB…</div>
-        ) : error ? (
+        {/* ── loading: handled by full-page splash above ─────────── */}
+        {loading ? null : error ? (
           <div className="rounded-[2rem] border border-red-400/20 bg-red-500/10 p-8 text-red-100">{error}</div>
         ) : !data ? null : (
           <div className="space-y-6">
