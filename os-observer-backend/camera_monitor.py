@@ -154,6 +154,13 @@ class CameraMonitor:
         try:
             import cv2  # type: ignore
             import mediapipe as mp  # type: ignore
+            
+            try:
+                from ultralytics import YOLO
+                self.yolo_model = YOLO("yolov8n.pt")
+            except ImportError:
+                self.yolo_model = None
+                
         except Exception:
             self._set_status("unavailable", "Camera unavailable: install cv2 + mediapipe.")
             return
@@ -215,12 +222,23 @@ class CameraMonitor:
                 mar = self._mouth_aspect_ratio(lm)
                 expr = self._detect_expression(lm, ear, threshold, mar)
 
+                # --- YOLO Object Detection for Phone ---
+                if hasattr(self, 'yolo_model') and self.yolo_model is not None and self._frames_processed % 4 == 0:
+                    try:
+                        results = self.yolo_model(rgb, classes=[67], verbose=False)
+                        if len(results[0].boxes) > 0:
+                            expr = "distracted (phone in hand)"
+                    except Exception:
+                        pass
+                # ---------------------------------------
+
                 with self._lock:
                     self._face_detected = True
                     self._eye_aspect_ratio = ear
                     self._mouth_open_ratio = mar
                     self._closed_threshold = threshold
                     self._expression = expr
+                    self.latest_frame_rgb = rgb.copy()
 
                 self._set_status("tracking", f"Tracking - {expr}")
                 last_sample_at = now
@@ -248,6 +266,23 @@ class CameraMonitor:
                     self._blink_frames = 0
 
     def _detect_expression(self, lm, ear: float, threshold: float, mar: float) -> str:
+        # 1. Check Head Pose (Pitch) to detect looking down at phone
+        try:
+            nose_y = lm[1].y
+            chin_y = lm[152].y
+            forehead_y = lm[10].y
+            
+            nose_to_chin = abs(chin_y - nose_y)
+            forehead_to_nose = abs(nose_y - forehead_y)
+            
+            # If the distance from forehead to nose is vastly larger than nose to chin, 
+            # the user's head is pitched severely downward (looking at phone/lap).
+            if nose_to_chin > 0 and (forehead_to_nose / nose_to_chin) > 1.35:
+                return "distracted (phone)"
+        except Exception:
+            pass
+
+        # 2. Check expressions
         open_ref = self._open_eye_reference()
         if open_ref and threshold < ear < open_ref * EAR_SQUINT_RATIO:
             return "squinting"
