@@ -570,14 +570,14 @@ export default function DashboardPage() {
             </Panel>
 
             {/* ── row 6: app breakdown + friction hotspots ─────────────── */}
-            <div className="grid gap-6 xl:grid-cols-2">
+            {/* <div className="grid gap-6 xl:grid-cols-2">
               <Panel eyebrow="Per-app analysis" title="App workload & cognitive impact">
                 <AppBreakdownTable apps={a?.appBreakdown || []} />
               </Panel>
               <Panel eyebrow="Friction analysis" title="Highest-friction artifacts">
                 <FrictionList hotspots={a?.frictionHotspots || []} />
               </Panel>
-            </div>
+            </div> */}
 
             {/* ── row 7: score extremes ─────────────────────────────────── */}
             <Panel eyebrow="Score extremes" title="Peak cognitive moments in the DB">
