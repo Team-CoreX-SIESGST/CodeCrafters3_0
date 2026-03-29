@@ -22,6 +22,27 @@ const serialiseDate = (value) => {
 const collection = (name) => mongoose.connection.db.collection(`cognitive_${name}`);
 const metaCollection = () => mongoose.connection.db.collection("cognitive_sync_meta");
 
+async function detectNativeObserverGraph() {
+  const [entityCount, relationCount, nativeEntityCount] = await Promise.all([
+    collection("entities").countDocuments({}),
+    collection("relations").countDocuments({}),
+    collection("entities").countDocuments({
+      $or: [
+        { entity_type: { $in: ["session", "classifier_state"] } },
+        { entity_id: /^snapshot:/ },
+        { entity_id: /^session:/ },
+      ],
+    }),
+  ]);
+
+  return {
+    entityCount,
+    relationCount,
+    nativeEntityCount,
+    available: entityCount > 0 && relationCount > 0 && nativeEntityCount > 0,
+  };
+}
+
 const graphId = (kind, ...parts) => {
   const normalized = parts
     .map((part) => String(part || "").trim().toLowerCase())
@@ -672,6 +693,16 @@ export async function syncCognitiveGraphMaterialized({
       skipped: true,
       reason: "fresh",
       updatedAt: lastUpdatedAt.toISOString(),
+    };
+  }
+
+  const nativeGraph = await detectNativeObserverGraph();
+  if (nativeGraph.available) {
+    return {
+      connected: true,
+      skipped: true,
+      reason: "native_graph_present",
+      stats: nativeGraph,
     };
   }
 

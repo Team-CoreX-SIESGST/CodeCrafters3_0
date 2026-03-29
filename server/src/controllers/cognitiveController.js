@@ -226,6 +226,18 @@ async function fetchMongoGraphData() {
   };
 }
 
+const hasNativeObserverGraph = (entities = []) =>
+  entities.some((entity) => {
+    const entityId = normaliseLabel(entity?.entity_id, "");
+    const entityType = normaliseLabel(entity?.entity_type, "");
+    return (
+      entityId.startsWith("snapshot:") ||
+      entityId.startsWith("session:") ||
+      entityType === "session" ||
+      entityType === "classifier_state"
+    );
+  });
+
 const graphId = (kind, ...parts) => {
   const normalized = parts
     .map((part) => String(part || "").trim().toLowerCase())
@@ -521,10 +533,28 @@ function buildGraphPayload({
   liveEntities = [],
   liveRelations = [],
 } = {}) {
-  const snapshotGraph = buildSnapshotGraphData(mongoSnapshots);
+  const nativeObserverGraph = hasNativeObserverGraph(mongoEntities);
+  const snapshotGraph = nativeObserverGraph ? { entities: [], relations: [] } : buildSnapshotGraphData(mongoSnapshots);
+  const filteredMongoEntities = nativeObserverGraph
+    ? (Array.isArray(mongoEntities) ? mongoEntities : []).filter((entity) => {
+        const entityId = normaliseLabel(entity?.entity_id, "");
+        return !entityId.startsWith("mongo_");
+      })
+    : Array.isArray(mongoEntities)
+      ? mongoEntities
+      : [];
+  const filteredMongoRelations = nativeObserverGraph
+    ? (Array.isArray(mongoRelations) ? mongoRelations : []).filter((relation) => {
+        const fromId = normaliseLabel(relation?.from_id, "");
+        const toId = normaliseLabel(relation?.to_id, "");
+        return !fromId.startsWith("mongo_") && !toId.startsWith("mongo_");
+      })
+    : Array.isArray(mongoRelations)
+      ? mongoRelations
+      : [];
   const sortedEntities = sortByDateDesc(
     [
-      ...(Array.isArray(mongoEntities) ? mongoEntities : []),
+      ...filteredMongoEntities,
       ...snapshotGraph.entities,
       ...(Array.isArray(liveEntities) ? liveEntities : []),
     ],
@@ -532,7 +562,7 @@ function buildGraphPayload({
   );
   const nodeMap = new Map();
   const dbNodeIds = new Set(
-    [...(Array.isArray(mongoEntities) ? mongoEntities : []), ...snapshotGraph.entities]
+    [...filteredMongoEntities, ...snapshotGraph.entities]
       .map((entity) => normaliseLabel(entity?.entity_id, ""))
       .filter(Boolean)
   );
@@ -555,7 +585,7 @@ function buildGraphPayload({
         entity?.summary || entity?.detail_text || entity?.description,
         ""
       ),
-      updatedAt: serialiseDate(entity?.updated_at),
+      updatedAt: serialiseDate(entity?.updated_at || entity?.generated_at || entity?.created_at),
       source: inDb && inLive ? "both" : inLive ? "live" : "db",
     });
   }
@@ -565,7 +595,7 @@ function buildGraphPayload({
   const links = [];
   const seenLinks = new Set();
   const dbLinkIds = new Set(
-    [...(Array.isArray(mongoRelations) ? mongoRelations : []), ...snapshotGraph.relations]
+    [...filteredMongoRelations, ...snapshotGraph.relations]
       .map((relation) => {
         const source = normaliseLabel(relation?.from_id, "");
         const target = normaliseLabel(relation?.to_id, "");
@@ -587,7 +617,7 @@ function buildGraphPayload({
 
   for (const relation of sortByDateDesc(
     [
-      ...(Array.isArray(mongoRelations) ? mongoRelations : []),
+      ...filteredMongoRelations,
       ...snapshotGraph.relations,
       ...(Array.isArray(liveRelations) ? liveRelations : []),
     ],
@@ -605,7 +635,7 @@ function buildGraphPayload({
       source,
       target,
       label: normaliseLabel(relation?.relation_type, "related_to"),
-      updatedAt: serialiseDate(relation?.updated_at),
+      updatedAt: serialiseDate(relation?.updated_at || relation?.created_at),
       sourceKind: inDb && inLive ? "both" : inLive ? "live" : "db",
     });
   }
@@ -661,12 +691,21 @@ export const getCognitiveDashboard = async (_req, res) => {
   try {
     const mongoConnected = mongoose.connection.readyState === 1 && !!mongoose.connection.db;
 
-    const graphSync = await syncCognitiveGraphMaterialized();
-
-    const [mongoData, mongoGraph] = await Promise.all([
+    const [mongoData, initialMongoGraph] = await Promise.all([
       fetchMongoDashboardData(),
       fetchMongoGraphData(),
     ]);
+    let mongoGraph = initialMongoGraph;
+    let graphSync = {
+      connected: mongoConnected,
+      skipped: true,
+      reason: mongoGraph.entityCount > 0 || mongoGraph.relationCount > 0 ? "graph_already_present" : "db_not_connected",
+    };
+
+    if (mongoConnected && mongoGraph.entityCount === 0 && mongoGraph.relationCount === 0) {
+      graphSync = await syncCognitiveGraphMaterialized();
+      mongoGraph = await fetchMongoGraphData();
+    }
 
     const snapshots = sortByDateDesc(mongoData.snapshots, "generated_at");
     const events = mongoData.events;

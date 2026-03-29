@@ -50,6 +50,42 @@ const project = (x, y, z, W, H, FOV = 700, camZ = -380) => {
   return { sx: W / 2 + x * scale, sy: H / 2 + y * scale, scale: Math.max(0.3, scale), z };
 };
 
+const toMillis = (value) => {
+  if (!value) return 0;
+  const parsed = new Date(value).getTime();
+  return Number.isNaN(parsed) ? 0 : parsed;
+};
+
+function selectRecentGraph(nodes = [], links = [], maxNodes = 22) {
+  const sortedNodes = [...nodes].sort((left, right) => {
+    const byUpdatedAt = toMillis(right?.updatedAt) - toMillis(left?.updatedAt);
+    if (byUpdatedAt !== 0) return byUpdatedAt;
+    return (right?.degree || 0) - (left?.degree || 0);
+  });
+
+  const nodeById = new Map(sortedNodes.map((node) => [node.id, node]));
+  const selectedIds = new Set(sortedNodes.slice(0, maxNodes).map((node) => node.id));
+  const sortedLinks = [...links].sort(
+    (left, right) => toMillis(right?.updatedAt) - toMillis(left?.updatedAt)
+  );
+
+  for (const link of sortedLinks) {
+    if (selectedIds.size >= maxNodes) break;
+    const hasSource = selectedIds.has(link.source);
+    const hasTarget = selectedIds.has(link.target);
+    if (hasSource && !hasTarget && nodeById.has(link.target)) selectedIds.add(link.target);
+    if (hasTarget && !hasSource && nodeById.has(link.source)) selectedIds.add(link.source);
+  }
+
+  const selectedNodes = sortedNodes.filter((node) => selectedIds.has(node.id)).slice(0, maxNodes);
+  const selectedNodeIds = new Set(selectedNodes.map((node) => node.id));
+  const selectedLinks = sortedLinks.filter(
+    (link) => selectedNodeIds.has(link.source) && selectedNodeIds.has(link.target)
+  );
+
+  return { nodes: selectedNodes, links: selectedLinks };
+}
+
 export default function AnalyticsNodeGraph({ nodes = [], links = [], height = 500 }) {
   const canvasRef = useRef(null);
   const stateRef = useRef(null);
@@ -60,7 +96,8 @@ export default function AnalyticsNodeGraph({ nodes = [], links = [], height = 50
     if (!canvas) return;
 
     /* ── initial placement – sphere shell layout ─── */
-    const dbNodes = nodes.slice(0, 22);
+    const recentGraph = selectRecentGraph(nodes, links, 22);
+    const dbNodes = recentGraph.nodes;
 
     const sceneNodes = dbNodes.map((n, i) => {
       /* Fibonacci sphere distribution */
@@ -92,7 +129,7 @@ export default function AnalyticsNodeGraph({ nodes = [], links = [], height = 50
     });
 
     const nodeById = new Map(sceneNodes.map((n) => [n.id, n]));
-    const sceneLinks = links
+    const sceneLinks = recentGraph.links
       .filter((l) => nodeById.has(l.source) && nodeById.has(l.target))
       .map((l) => ({ a: nodeById.get(l.source), b: nodeById.get(l.target), label: l.label }));
 
@@ -337,9 +374,9 @@ export default function AnalyticsNodeGraph({ nodes = [], links = [], height = 50
       ctx.font      = "500 7.5px 'IBM Plex Mono', monospace";
       ctx.textAlign = "left";
       ctx.fillStyle = "rgba(0,232,122,0.38)";
-      ctx.fillText("NEUROTRACE // 3D DB CONTEXT", pad + 3, pad + 18);
+      ctx.fillText("NEUROTRACE // RECENT DB CONTEXT", pad + 3, pad + 18);
       ctx.fillStyle = "rgba(0,232,122,0.2)";
-      ctx.fillText(`NODES ${nodes.length}  LINKS ${links.length}`, pad + 3, pad + 28);
+      ctx.fillText(`RECENT NODES ${dbNodes.length}  LINKS ${sceneLinks.length}`, pad + 3, pad + 28);
       ctx.textAlign = "right";
       ctx.fillStyle = "rgba(106,169,255,0.4)";
       ctx.fillText("DRAG NODE · DRAG BG TO ROTATE", W - pad - 3, pad + 18);
