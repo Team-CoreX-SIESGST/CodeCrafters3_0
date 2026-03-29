@@ -1,14 +1,17 @@
 from __future__ import annotations
 
+import json
 import os
 import subprocess
 import winreg
+from pathlib import Path
 
 
 TOAST_REG_PATH = r"Software\Microsoft\Windows\CurrentVersion\PushNotifications"
 TOAST_VALUE_NAME = "ToastEnabled"
 NOTIFICATIONS_SETTINGS_PATH = r"Software\Microsoft\Windows\CurrentVersion\Notifications\Settings"
 NOTIFICATION_VALUE_NAMES = ("Enabled", "ShowInActionCenter", "ShowBanners")
+_STATE_FILE = Path(__file__).resolve().parent / ".runtime" / "focus_mode_state.json"
 
 _AUDIO_SCRIPT = r"""
 Add-Type -TypeDefinition @"
@@ -74,9 +77,10 @@ class FocusModeController:
         self._saved_toast_enabled: int | None = None
         self._saved_audio_muted: bool | None = None
         self._saved_notification_values: dict[str, dict[str, int | None]] = {}
+        self._recover_stale_state()
 
     def sync(self, state_label: str) -> None:
-        should_be_active = self._supported and state_label == "focused"
+        should_be_active = self._supported and state_label in {"focused", "deep_focus"}
         if should_be_active == self._is_active:
             return
         if should_be_active:
@@ -85,17 +89,22 @@ class FocusModeController:
             self.restore()
 
     def restore(self) -> None:
-        if not self._supported or not self._is_active:
+        if not self._supported:
+            return
+        self._load_persisted_state()
+        if not self._is_active and self._saved_toast_enabled is None and self._saved_audio_muted is None:
             return
         self._restore_notifications()
         self._restore_audio()
         self._is_active = False
+        self._clear_persisted_state()
         self._emit("Focused mode released: notifications and speaker restored.")
 
     def _activate(self) -> None:
         if not self._supported:
             return
         self._capture_current_state()
+        self._persist_state()
         self._disable_notifications()
         self._set_audio_muted(True)
         self._is_active = True
@@ -106,6 +115,8 @@ class FocusModeController:
             self._saved_toast_enabled = self._get_toast_enabled()
         if self._saved_audio_muted is None:
             self._saved_audio_muted = self._get_audio_muted()
+        if not self._saved_notification_values:
+            self._saved_notification_values = self._snapshot_notification_settings()
 
     def _disable_notifications(self) -> None:
         try:
@@ -143,11 +154,27 @@ class FocusModeController:
         with winreg.CreateKey(winreg.HKEY_CURRENT_USER, TOAST_REG_PATH) as key:
             winreg.SetValueEx(key, TOAST_VALUE_NAME, 0, winreg.REG_DWORD, int(enabled))
 
+    def _snapshot_notification_settings(self) -> dict[str, dict[str, int | None]]:
+        saved: dict[str, dict[str, int | None]] = {}
+        with winreg.CreateKey(winreg.HKEY_CURRENT_USER, NOTIFICATIONS_SETTINGS_PATH) as root:
+            index = 0
+            while True:
+                try:
+                    subkey_name = winreg.EnumKey(root, index)
+                    index += 1
+                except OSError:
+                    break
+                subkey_path = f"{NOTIFICATIONS_SETTINGS_PATH}\\{subkey_name}"
+                with winreg.CreateKey(winreg.HKEY_CURRENT_USER, subkey_path) as subkey:
+                    saved[subkey_name] = {
+                        value_name: self._query_dword(subkey, value_name)
+                        for value_name in NOTIFICATION_VALUE_NAMES
+                    }
+        return saved
+
     def _set_notification_settings_enabled(self, enabled: bool) -> None:
         desired = 1 if enabled else 0
         with winreg.CreateKey(winreg.HKEY_CURRENT_USER, NOTIFICATIONS_SETTINGS_PATH) as root:
-            if not enabled:
-                self._saved_notification_values = {}
             index = 0
             subkeys: list[str] = []
             while True:
@@ -160,11 +187,6 @@ class FocusModeController:
         for subkey_name in subkeys:
             subkey_path = f"{NOTIFICATIONS_SETTINGS_PATH}\\{subkey_name}"
             with winreg.CreateKey(winreg.HKEY_CURRENT_USER, subkey_path) as subkey:
-                if not enabled:
-                    self._saved_notification_values[subkey_name] = {
-                        value_name: self._query_dword(subkey, value_name)
-                        for value_name in NOTIFICATION_VALUE_NAMES
-                    }
                 saved_values = self._saved_notification_values.get(subkey_name, {})
                 for value_name in NOTIFICATION_VALUE_NAMES:
                     original = saved_values.get(value_name)
@@ -231,6 +253,59 @@ class FocusModeController:
             self._emit("Focused mode warning: audio control command failed.", persist=False)
             return None
         return result.stdout.strip() if expect_output else ""
+
+    def _recover_stale_state(self) -> None:
+        if not self._supported or not _STATE_FILE.exists():
+            return
+        self._load_persisted_state()
+        if self._saved_toast_enabled is None and self._saved_audio_muted is None:
+            self._clear_persisted_state()
+            return
+        self._restore_notifications()
+        self._restore_audio()
+        self._clear_persisted_state()
+        self._emit("Recovered Windows notifications and speaker state from a previous focused session.", persist=False)
+
+    def _persist_state(self) -> None:
+        if self._saved_toast_enabled is None:
+            return
+        _STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
+        payload = {
+            "toast_enabled": self._saved_toast_enabled,
+            "audio_muted": self._saved_audio_muted,
+            "notification_values": self._saved_notification_values,
+        }
+        _STATE_FILE.write_text(json.dumps(payload), encoding="utf-8")
+
+    def _load_persisted_state(self) -> None:
+        if self._saved_toast_enabled is not None or not _STATE_FILE.exists():
+            return
+        try:
+            payload = json.loads(_STATE_FILE.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return
+        toast_enabled = payload.get("toast_enabled")
+        audio_muted = payload.get("audio_muted")
+        notification_values = payload.get("notification_values", {})
+        self._saved_toast_enabled = int(toast_enabled) if toast_enabled is not None else None
+        self._saved_audio_muted = bool(audio_muted) if audio_muted is not None else None
+        if isinstance(notification_values, dict):
+            self._saved_notification_values = {
+                str(subkey): {
+                    value_name: (None if value is None else int(value))
+                    for value_name, value in values.items()
+                }
+                for subkey, values in notification_values.items()
+                if isinstance(values, dict)
+            }
+
+    def _clear_persisted_state(self) -> None:
+        try:
+            _STATE_FILE.unlink()
+        except FileNotFoundError:
+            return
+        except OSError:
+            return
 
     def _emit(self, message: str, persist: bool = True) -> None:
         if self.event_callback:
