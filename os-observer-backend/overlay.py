@@ -130,6 +130,18 @@ class StatusOverlay:
         self.compact.configure(bg="#0b1220")
         self.compact.geometry(self._compact_geometry())
 
+        # ── Dashboard Logic ───────────────────────────────────────────────
+        self._allowed_apps = {"chrome", "code", "pycharm", "slack", "outlook"}
+        try:
+            if os.path.exists("focus_rules.json"):
+                with open("focus_rules.json", "r") as f:
+                    saved = json.load(f)
+                    if isinstance(saved, list):
+                        self._allowed_apps = set(saved)
+        except Exception:
+            pass
+        self._filter_win = None
+
         # ── Layout ────────────────────────────────────────────────────────
         self.outer = tk.Frame(self.root, bg="#0b1220", padx=14, pady=10)
         self.outer.pack(fill="both", expand=True)
@@ -141,12 +153,21 @@ class StatusOverlay:
         self._bind_drag(self.header)
 
         self.lbl_title = tk.Label(
-            self.header, text="⚡ Flow Guardian v2",
-            font=("Segoe UI", 11, "bold"),
-            bg="#0b1220", fg="#f8fafc", anchor="w",
+            self.header, text="FLOW GUARDIAN",
+            font=("Inter Bold", 11, "bold"),
+            bg="#0b1220", fg="#94a3b8"
         )
-        self.lbl_title.pack(side="left", fill="x", expand=True)
-        self._bind_drag(self.lbl_title)
+        self.lbl_title.pack(side="left")
+
+        # App Filter Button
+        self.btn_filter = tk.Button(
+            self.header, text="  RULES  ",
+            font=("Inter Bold", 9), cursor="hand2",
+            bg="#1e293b", fg="#cbd5e1",
+            activebackground="#334155", activeforeground="#f8fafc",
+            relief="flat", bd=0, command=self.show_rules
+        )
+        self.btn_filter.pack(side="right", padx=10)
 
         self.lbl_voice_coach = tk.Label(
             self.header, text="🔊 AI COACH ACTIVE",
@@ -431,6 +452,105 @@ class StatusOverlay:
         )
         self.lbl_hint.pack(anchor="w", pady=(8, 0), fill="x")
         self._bind_drag(self.lbl_hint)
+
+    def show_rules(self) -> None:
+        """Pop up a premium styled window to allow/deny app notifications."""
+        if self._filter_win and self._filter_win.winfo_exists():
+            self._filter_win.lift()
+            return
+
+        self._filter_win = tk.Toplevel(self.root)
+        self._filter_win.title("Filter Rules - Flow Guardian")
+        self._filter_win.configure(bg="#0f172a") # Darker slate
+        self._filter_win.geometry("450x650")
+        self._filter_win.attributes("-topmost", True)
+
+        # Header with Gradient-like feel
+        header = tk.Frame(self._filter_win, bg="#1e293b", pady=15)
+        header.pack(fill="x")
+        
+        tk.Label(
+            header, text="NOTIFICATION RULES",
+            bg="#1e293b", fg="#3b82f6", font=("Inter Bold", 12, "bold")
+        ).pack()
+        
+        tk.Label(
+            header, text="Choose which apps can bypass focus mode",
+            bg="#1e293b", fg="#94a3b8", font=("Inter", 9)
+        ).pack(pady=(2, 0))
+
+        # Search Bar
+        search_frame = tk.Frame(self._filter_win, bg="#0f172a", pady=10)
+        search_frame.pack(fill="x", padx=30)
+        
+        self.app_search_var = tk.StringVar()
+        self.app_search_var.trace_add("write", lambda *args: self._update_filter_list())
+        
+        search_ent = tk.Entry(
+            search_frame, textvariable=self.app_search_var,
+            bg="#1e293b", fg="white", font=("Inter", 11),
+            relief="flat", insertbackground="white", highlightthickness=1,
+            highlightbackground="#334155"
+        )
+        search_ent.pack(fill="x", ipady=8, padx=5)
+        search_ent.insert(0, "Search apps...")
+        search_ent.bind("<FocusIn>", lambda e: search_ent.delete(0, 'end') if search_ent.get() == "Search apps..." else None)
+
+        # Scrollable List Area
+        self.apps_scroll_frame = tk.Frame(self._filter_win, bg="#0f172a")
+        self.apps_scroll_frame.pack(fill="both", expand=True, padx=30, pady=10)
+
+        self._update_filter_list()
+
+        # Bottom Bar
+        footer = tk.Frame(self._filter_win, bg="#0f172a", pady=20)
+        footer.pack(fill="x")
+        
+        tk.Button(
+            footer, text="SAVE & DONE",
+            bg="#3b82f6", fg="white", font=("Inter Bold", 10, "bold"),
+            relief="flat", cursor="hand2", pady=12, width=30,
+            command=self._filter_win.destroy
+        ).pack()
+
+    def _update_filter_list(self) -> None:
+        # Clear current list
+        for widget in self.apps_scroll_frame.winfo_children():
+            widget.destroy()
+
+        search_q = self.app_search_var.get().lower()
+        if search_q == "search apps...": search_q = ""
+
+        # Common apps + user discovered apps
+        all_known = sorted(list({"chrome", "slack", "code", "pycharm", "outlook", "discord", "teams", "spotify", "zoom", "notion"}))
+        
+        for app in all_known:
+            if search_q and search_q not in app.lower():
+                continue
+                
+            row = tk.Frame(self.apps_scroll_frame, bg="#0f172a", pady=4)
+            row.pack(fill="x")
+            
+            is_on = app in self._allowed_apps
+            var = tk.BooleanVar(value=is_on)
+            
+            cb = tk.Checkbutton(
+                row, text=f"  {app.capitalize()}",
+                variable=var, bg="#0f172a", fg="#cbd5e1",
+                selectcolor="#1e293b", activebackground="#0f172a",
+                activeforeground="white", font=("Inter", 11),
+                relief="flat", command=lambda a=app, v=var: self._toggle_app(a, v.get())
+            )
+            cb.pack(side="left")
+
+    def _toggle_app(self, app: str, allowed: bool) -> None:
+        if allowed: self._allowed_apps.add(app)
+        else: self._allowed_apps.discard(app)
+        try:
+            with open("focus_rules.json", "w") as f:
+                import json
+                json.dump(list(self._allowed_apps), f)
+        except Exception: pass
 
     # ── Run loop ──────────────────────────────────────────────────────────────
     def run(self) -> None:
@@ -1298,3 +1418,4 @@ class ONNXViewerWindow:
             self._log_text.insert("end", ts_part, "ts")
             self._log_text.insert("end", rest + "\n", state_tag)
         self._log_text.configure(state="disabled")
+

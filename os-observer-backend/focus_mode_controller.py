@@ -5,7 +5,7 @@ import os
 import subprocess
 import winreg
 from pathlib import Path
-
+# we  re simulating the process of focus, now that iseen the foucs is to inconsistem, and it changes 
 
 TOAST_REG_PATH = r"Software\Microsoft\Windows\CurrentVersion\PushNotifications"
 TOAST_VALUE_NAME = "ToastEnabled"
@@ -92,13 +92,12 @@ class FocusModeController:
         if not self._supported:
             return
         self._load_persisted_state()
-        if not self._is_active and self._saved_toast_enabled is None and self._saved_audio_muted is None:
+        if not self._is_active and self._saved_toast_enabled is None:
             return
         self._restore_notifications()
-        self._restore_audio()
         self._is_active = False
         self._clear_persisted_state()
-        self._emit("Focused mode released: notifications and speaker restored.")
+        self._emit("Focused mode released: notifications restored.")
 
     def _activate(self) -> None:
         if not self._supported:
@@ -106,9 +105,8 @@ class FocusModeController:
         self._capture_current_state()
         self._persist_state()
         self._disable_notifications()
-        self._set_audio_muted(True)
         self._is_active = True
-        self._emit("Focused mode enabled: notifications off and speaker muted.")
+        self._emit("Focused mode enabled: notifications off.")
 
     def _capture_current_state(self) -> None:
         if self._saved_toast_enabled is None:

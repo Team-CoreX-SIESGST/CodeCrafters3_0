@@ -286,7 +286,7 @@ class CameraMonitor:
             
             # If the distance from forehead to nose is vastly larger than nose to chin, 
             # the user's head is pitched severely downward (looking at phone/lap).
-            if nose_to_chin > 0 and (forehead_to_nose / nose_to_chin) > 1.60:
+            if nose_to_chin > 0 and (forehead_to_nose / nose_to_chin) > 2.20:
                 return "distracted (phone)"
         except Exception:
             pass

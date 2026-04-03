@@ -884,8 +884,7 @@ class ActivityMonitor:
         }
 
     def _apply_camera_override(self, ml_result: dict) -> None:
-        """Layer camera vision signals on top of frozen ONNX output.
-        Safe to call even during warmup with a default ml_result dict."""
+        """Layer camera vision signals on top of frozen ONNX output."""
         try:
             cam_snap      = self.camera_monitor.snapshot() if self.camera_enabled else {}
             expr          = str(cam_snap.get("expression", "neutral")).lower()
@@ -898,15 +897,30 @@ class ActivityMonitor:
             # 1. Phone Alert (Immediate Voice Coach trigger)
             if ("phone" in expr) and getattr(self, "coach", None):
                 now = time.time()
-                # Rate limit phone alerts to once every 30 seconds
-                if now - getattr(self, "_last_phone_alert_at", 0) > 30:
-                    self.coach.speak("I noticed the phone usage. Let us stay focused on the task.")
+                if now - getattr(self, "_last_phone_alert_at", 0) > 300:
+                    self.coach.speak("Phone detected. Please return to your task to maintain your flow.")
                     self._last_phone_alert_at = now
+
 
             # Rule 1: Active OR rigorous head movement -> confused
             if (rigorous_head or head_class == "active") and current_state not in {"fatigued"}:
                 ml_result["cognitive_state"] = "confused"
                 ml_result["confusion_friction"] = min(ml_result.get("confusion_friction", 0.0) + 0.25, 1.0)
+                
+                # AI Coach Rules: 1st warning within 1 second, 2nd warning after 5 mins of persistent action
+                if getattr(self, "coach", None):
+                    now = time.time()
+                    if getattr(self, "_scratch_start", 0) == 0: self._scratch_start = now
+                    if 0 < (now - self._scratch_start) <= 2.2 and not getattr(self, "_sent_f_scr", False):
+                        self.coach.speak("I noticed the head movement. Are we stuck on a problem?")
+                        self._sent_f_scr = True
+                    if now - self._scratch_start > 300 and not getattr(self, "_sent_l_scr", False):
+                        self.coach.speak("I see the persistent head movement. Perhaps a change of focus will help.")
+                        self._sent_l_scr = True
+            else:
+                self._scratch_start = 0
+                self._sent_f_scr = False
+                self._sent_l_scr = False
 
             # Rule 2: Heavy PERCLOS spike -> fatigued
             if perclos > 0.20:
@@ -1001,51 +1015,47 @@ class ActivityMonitor:
             active_window = str(system.get("active_window", "Unknown"))
             self.time_tracker.tick(active_app, active_window)
 
-            # --- Urgent Notification Reader ---
-            # If current title has urgent keywords, announce it (once per 60s)
+            # --- Notification Ranking & Allowance ---
             if getattr(self, "coach", None):
-                urgent_keys = ["urgent", "critical", "important", "alert", "warning"]
                 low_title = active_window.lower()
-                if any(k in low_title for k in urgent_keys):
-                    now_ts = time.time()
-                    if now_ts - getattr(self, "_last_urgent_notif_at", 0) > 60:
-                        self.coach.speak(f"Alert: Critical update in your {active_app} window.")
-                        self._last_urgent_notif_at = now_ts
-            
-            # --- AI Coach Notification & Phone alerts ---
-            if getattr(self, "coach", None):
-                expression = str(camera.get("expression", "")).lower()
-                if "phone" in expression:
-                    # Persist reading for roughly 3 continuous seconds (~10 snapshots)
-                    self._phone_persist = getattr(self, "_phone_persist", 0) + 1
-                    if self._phone_persist == 10 and (now_ts - getattr(self, "_last_phone_alert_time", 0.0)) > 30:
-                        self.coach.speak("Alert. Persistent cell phone distraction detected. Please return your focus to the screen.")
-                        self._last_phone_alert_time = now_ts
+                low_app   = active_app.lower()
+                
+                # Check persistent user rules (from focus_rules.json)
+                allowed_apps = {"chrome", "code", "pycharm", "slack", "outlook"}
+                try:
+                    if os.path.exists("focus_rules.json"):
+                        with open("focus_rules.json", "r") as f:
+                            saved = json.load(f)
+                            if isinstance(saved, list): allowed_apps = set(saved)
+                except Exception: pass
+
+                # If the app is in your allowed list, skip all interuption logic
+                if any(a in low_app for a in allowed_apps):
+                    pass # App is explicitly allowed to be visible
+                
                 else:
-                    self._phone_persist = 0
-                
-                # Check for "urgent" or specific keywords in active window (e.g., Slack/Teams)
-                window_lower = active_window.lower()
-                if ("urgent" in window_lower or "critical" in window_lower) and (now_ts - getattr(self, "_last_urgent_alert_time", 0.0)) > 60:
-                    clean_title = active_window.split('-')[0].strip()[:40]
-                    self.coach.speak(f"Important notification detected on screen: {clean_title}")
-                    self._last_urgent_alert_time = now_ts
-                    
-                # Dynamic demo break prompt based on cognitive state
-                if not hasattr(self, "_demo_start_ts"): self._demo_start_ts = now_ts
-                
-                ml_state = self._active_ml_state(now_ts)
-                current_ml_state = str(ml_state.get("cognitive_state", "")) if isinstance(ml_state, dict) else ""
-                
-                # 5 mins if slipping, 30 mins if focused/ideal
-                dyn_limit_sec = 300 if current_ml_state in {"fatigued", "confused", "harmful_confusion"} else 1800
-                
-                if (now_ts - self._demo_start_ts) >= dyn_limit_sec and not getattr(self, "_break_prompted", False):
-                    if dyn_limit_sec == 300:
-                        self.coach.speak("You appear fatigued. You should take a 5-minute break.")
-                    else:
-                        self.coach.speak("You have been deeply focused for 30 minutes. Would you like to take a break?")
-                    self._break_prompted = True
+                    # TIER 1: CRITICAL (AI Speaks + Dashboard Event)
+                    critical_keys = ["urgent", "critical", "alert", "security", "fail"]
+                    work_keys = ["task", "meeting", "message", "deadline", "comment"]
+
+                    if any(k in low_title for k in critical_keys):
+                        now_ts = time.time()
+                        if now_ts - getattr(self, "_last_rank1_at", 0) > 60:
+                            self.coach.speak(f"Alert. Critical notification from {active_app}. Please check.")
+                            self._last_rank1_at = now_ts
+                            self.record_event(f"PRIORITY 1: {active_window[:50]}")
+
+                    # TIER 2: WORK-RELATED (Log only)
+                    elif any(k in low_title for k in work_keys):
+                        now_ts = time.time()
+                        if now_ts - getattr(self, "_last_rank2_at", 0) > 60:
+                            self._last_rank2_at = now_ts
+                            self.record_event(f"PRIORITY 2: {active_window[:50]}")
+
+                # TIER 3: ALLOWED/LOW (Silently ignored by Coach/Dashboard)
+                # Everything else is muted to maintain your flow.
+            
+            # --- Time tracking data ---
             time_data = self.time_tracker.snapshot()
 
             # ── Derived cursor signals ────────────────────────────────────
